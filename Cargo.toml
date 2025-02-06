@@ -1,0 +1,23 @@
+[package]
+name = "decent-key-storage"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[dependencies]
+anyhow = "1.0.95"
+jsonrpsee = { version = "0.24.8", features = ["full", "http-client"] }
+rustls = "0.23.22"
+tokio = { version = "1.43.0", features = ["full"] }
+tokio-macros = "=2.5.0"
+tracing = "0.1.41"
