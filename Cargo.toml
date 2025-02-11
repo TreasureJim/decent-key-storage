@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-path = "src/lib.rs"
+path = "src/lib/mod.rs"
 
 [[bin]]
 name = "client"
@@ -16,6 +16,9 @@ path = "src/server.rs"
 
 [dependencies]
 anyhow = "1.0.95"
+flexible-hyper-server-tls = "0.5.0"
+http-body-util = "0.1.2"
+hyper = "1.6.0"
 jsonrpsee = { version = "0.24.8", features = ["full", "http-client"] }
 rustls = "0.23.22"
 tokio = { version = "1.43.0", features = ["full"] }

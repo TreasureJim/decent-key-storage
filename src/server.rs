@@ -1,38 +1,32 @@
-use std::net::SocketAddr;
+use flexible_hyper_server_tls::*;
+use http_body_util::Full;
+use hyper::body::{Bytes, Incoming};
+use hyper::service::service_fn;
+use hyper::{Request, Response};
+use rustls::crypto::{ring, CryptoProvider};
+use std::convert::Infallible;
+use tokio::net::TcpListener;
 
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::rpc_params;
-use jsonrpsee::{http_client::HttpClient, server, RpcModule};
-use tokio;
+async fn hello_world(_req: Request<Incoming>) -> Result<Response<Full<Bytes>>, Infallible> {
+    Ok(Response::new(Full::<Bytes>::from("Hello, World!")))
+}
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let addr = run_server().await?;
+async fn main() {
+    let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+    println!("Listening on: {}", listener.local_addr().unwrap());
 
-    let client = HttpClient::builder().build(format!("https://{}", addr))?;
-    let response: String = client.request("test_method", rpc_params![]).await?;
-    println!("[main]: http response: {:?}", response);
-
-    Ok(())
-}
-
-async fn run_server() -> anyhow::Result<SocketAddr> {
-    let server = server::Server::builder()
-        .build("127.0.0.1:0".parse::<SocketAddr>()?)
-        .await?;
-    let mut module = RpcModule::new(());
-    module
-        .register_method("test_method", |_params, _, _| test_method())
+    let provider = ring::default_provider();
+    rustls::crypto::CryptoProvider::install_default(provider).unwrap();
+    let tls = rustls_helpers::get_tlsacceptor_from_files("./cert/cert.cer", "./cert/key.pem")
+        .await
         .unwrap();
 
-    let addr = server.local_addr()?;
-    let handle = server.start(module);
+    let mut acceptor = HttpOrHttpsAcceptor::new(listener)
+        .with_err_handler(|err| eprintln!("Error serving connection: {err:?}"))
+        .with_tls(tls);
 
-    tokio::spawn(handle.stopped());
-
-    Ok(addr)
-}
-
-fn test_method() -> String {
-    "testing!".to_string()
+    loop {
+        acceptor.accept(service_fn(hello_world)).await;
+    }
 }
