@@ -8,19 +8,27 @@ path = "src/lib/mod.rs"
 
 [[bin]]
 name = "client"
-path = "src/client.rs"
+path = "src/client/mod.rs"
 
 [[bin]]
 name = "server"
-path = "src/server.rs"
+path = "src/server/mod.rs"
 
 [dependencies]
 anyhow = "1.0.95"
-flexible-hyper-server-tls = "0.5.0"
-http-body-util = "0.1.2"
+base64 = "0.22.1"
+clap = { version = "4.5.30", features = ["derive"] }
+http = "1.2.0"
 hyper = "1.6.0"
-jsonrpsee = { version = "0.24.8", features = ["full", "http-client"] }
-rustls = "0.23.22"
-tokio = { version = "1.43.0", features = ["full"] }
-tokio-macros = "=2.5.0"
-tracing = "0.1.41"
+hyper-rustls = { version = "0.27.5", features = ["http2"] }
+hyper-util = "0.1.10"
+prost = "0.13"
+rustls = "0.23.23"
+thiserror = "2.0.11"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = "0.1.17"
+tonic = { version = "0.12.3", features = ["tls"] }
+tower-service = "0.3.3"
+
+[build-dependencies]
+tonic-build = "*"

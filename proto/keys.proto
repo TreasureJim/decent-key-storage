@@ -1,0 +1,11 @@
+syntax = "proto3";
+package keys;
+
+service KeyManagement {
+	rpc AddKey (KeyAddRequest);
+	}
+
+message KeyAddRequest {
+	string key_name = 1;
+	bytes key = 2;
+}
