@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
+name = "lib"
 path = "src/lib/mod.rs"
 
 [[bin]]
@@ -24,6 +25,7 @@ hyper-rustls = { version = "0.27.5", features = ["http2"] }
 hyper-util = "0.1.10"
 prost = "0.13"
 rustls = "0.23.23"
+rustls-webpki = "0.102.8"
 thiserror = "2.0.11"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tokio-stream = "0.1.17"

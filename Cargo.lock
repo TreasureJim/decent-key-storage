@@ -382,6 +382,7 @@ dependencies = [
  "hyper-util",
  "prost",
  "rustls",
+ "rustls-webpki",
  "thiserror",
  "tokio",
  "tokio-stream",

@@ -1,3 +1,4 @@
+use lib::tls::initialize;
 use std::net::SocketAddr;
 
 use tonic::transport::Identity;
@@ -40,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
     let cert = std::fs::read_to_string("cert/cert.cer")?;
     let key = std::fs::read_to_string("cert/key.pem")?;
 
+    initialize().expect("Couldn't initialise encryption");
     let identity = Identity::from_pem(cert, key);
 
     Server::builder()

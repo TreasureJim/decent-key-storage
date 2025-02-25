@@ -2,26 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use rustls::client::danger::ServerCertVerifier;
 
-use crate::known_hosts::KnownHosts;
-
-/// Initialize process-wide libraries needed for gRPC including the cryptography library used for rustls.
-pub fn initialize() -> Result<(), String> {
-    static mut INIT: bool = false;
-
-    unsafe {
-        if !INIT {
-            rustls::crypto::aws_lc_rs::default_provider()
-                .install_default()
-                .map_err(|_| {
-                    "Failed to initialize cryptography library needed for gRPC operations"
-                })?;
-            INIT = true;
-        }
-    }
-
-    Ok(())
-}
-
 #[derive(Debug)]
 pub struct CertTlsCapturer {
     captured_cert: Arc<Mutex<Option<Vec<u8>>>>,
@@ -51,49 +31,70 @@ impl ServerCertVerifier for CertTlsCapturer {
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &tonic::transport::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
+        message: &[u8],
+        cert: &tonic::transport::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::CryptoProvider::get_default()
+                .unwrap()
+                .signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &tonic::transport::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
+        message: &[u8],
+        cert: &tonic::transport::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::CryptoProvider::get_default()
+                .unwrap()
+                .signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        crate::global::SUPPORTED_SCHEMES.to_vec()
+        crate::global::supported_verif_algs()
     }
 }
 
 #[derive(Debug)]
-pub struct KnownHostsTls<'a> {
-    known_hosts: &'a KnownHosts
+pub struct KnownHostsTls {
+    certs: Vec<Vec<u8>>,
 }
 
-impl<'a> KnownHostsTls<'a> {
-    pub fn new(known_hosts: &'a KnownHosts) -> Self {
-        Self {
-            known_hosts
-        }
+impl KnownHostsTls {
+    pub fn new(certs: Vec<Vec<u8>>) -> Self {
+        Self { certs }
     }
 }
 
-impl<'a> ServerCertVerifier for KnownHostsTls<'a> {
+impl ServerCertVerifier for KnownHostsTls {
     fn verify_server_cert(
         &self,
-        _end_entity: &tonic::transport::CertificateDer<'_>,
+        end_entity: &tonic::transport::CertificateDer<'_>,
         _intermediates: &[tonic::transport::CertificateDer<'_>],
-        _server_name: &rustls::pki_types::ServerName<'_>,
+        server_name: &rustls::pki_types::ServerName<'_>,
         _ocsp_response: &[u8],
         _now: rustls::pki_types::UnixTime,
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        for cert in &self.certs {
+            if cert == end_entity.to_vec().as_slice() {
+                return Ok(rustls::client::danger::ServerCertVerified::assertion());
+            }
+        }
+
+        Err(rustls::Error::InvalidCertificate(
+            rustls::CertificateError::UnknownIssuer,
+        ))
     }
 
     fn verify_tls12_signature(
@@ -102,19 +103,33 @@ impl<'a> ServerCertVerifier for KnownHostsTls<'a> {
         cert: &tonic::transport::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(message, cert, dss, rustls::crypto::WebPkiSupportedAlgorithms::).cipher_suites)
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::CryptoProvider::get_default()
+                .unwrap()
+                .signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &tonic::transport::CertificateDer<'_>,
-        _dss: &rustls::DigitallySignedStruct,
+        message: &[u8],
+        cert: &tonic::transport::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::CryptoProvider::get_default()
+                .unwrap()
+                .signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        crate::global::SUPPORTED_SCHEMES.to_vec()
+        crate::global::supported_verif_algs()
     }
 }
