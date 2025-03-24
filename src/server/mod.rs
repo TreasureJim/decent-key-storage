@@ -1,3 +1,5 @@
+mod self_certificates;
+
 use lib::tls::initialize;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -49,16 +51,6 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(args.client_addr).await?;
     println!("Listening on {:?}", listener.local_addr().unwrap());
 
-    let cert = {
-        let mut path = args.data_folder.clone();
-        path.push("cert.pem");
-        std::fs::read_to_string(path)?
-    };
-    let key = {
-        let mut path = args.data_folder.clone();
-        path.push("key.pem");
-        std::fs::read_to_string(path)?
-    };
 
     initialize().expect("Couldn't initialise encryption");
     let identity = Identity::from_pem(cert, key);
