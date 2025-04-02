@@ -1,10 +1,11 @@
 mod decen;
+mod self_certificates;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use tonic::{transport::Server, Request, Response, Status};
 use tonic::transport::server::ServerTlsConfig;
+use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -50,12 +51,19 @@ async fn main() -> anyhow::Result<()> {
 
     println!("Listening on {:?}", listener.local_addr().unwrap());
 
-    lib::tls::initialize().expect("Couldn't initialise encryption");
-    let identity = lib::key_storage::read_self_signed_keys(&args.data_folder).unwrap_or_else(|| {
-        println!("Couldn't find self signed keys in {:?}, creating some!", args.data_folder);
-        lib::key_storage::create_self_signed_keys(&args.data_folder).expect("Couldn't create signed keys")
-    });
+    let cert = {
+        let mut path = args.data_folder.clone();
+        path.push("cert.pem");
+        std::fs::read_to_string(path)?
+    };
+    let key = {
+        let mut path = args.data_folder.clone();
+        path.push("key.pem");
+        std::fs::read_to_string(path)?
+    };
 
+    initialize().expect("Couldn't initialise encryption");
+    let identity = Identity::from_pem(cert, key);
 
     Server::builder()
         .tls_config(ServerTlsConfig::new().identity(identity))?
@@ -64,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     // TODO: Wait for first thread to crash and then cleanly shutdown the other threads
-    // TODO: 
+    // TODO:
     // Use select! {}
 
     Ok(())
