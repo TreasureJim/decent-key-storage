@@ -24,8 +24,9 @@ http = "1.2.0"
 hyper = "1.6.0"
 hyper-rustls = { version = "0.27.5", features = ["http2"] }
 hyper-util = "0.1.10"
-libp2p = "0.55.0"
+libp2p = { version = "0.55.0", features = ["full"] }
 libp2p-identity = { version = "0.2.10", features = ["ed25519", "serde"] }
+pem = { version = "3.0.5", features = ["serde"] }
 prost = "0.13"
 rand_core = "=0.6.4"
 rustls = "0.23.23"

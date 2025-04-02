@@ -1,6 +1,5 @@
+use tonic::transport::Identity;
 use base64::Engine;
-use rustls::sign::SigningKey;
-use serde::Serialize;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -108,6 +107,8 @@ impl KeyStorage {
 
 pub static DEFAULT_DATA_LOCATION: &str = "~/.local/decent-key-storage";
 pub static HOSTS_FILE_NAME: &str = "known_hosts";
+pub static KEY_FILE_NAME: &str = "key.pem";
+pub static CERT_FILE_NAME: &str = "cert.pem";
 
 /// Finds the default location of the known_hosts. If it doesn't exist, it creates it.
 pub fn default_storage_file() -> Result<PathBuf, std::io::Error> {
@@ -131,12 +132,44 @@ pub fn default_storage_file() -> Result<PathBuf, std::io::Error> {
     Ok(path.clone())
 }
 
-// TODO: Create custom PEM serialization
-struct PublicKey([u8; ed25519_dalek::PUBLIC_KEY_LENGTH]);
-struct PrivateKey([u8; ed25519_dalek::SECRET_KEY_LENGTH]);
-
-pub fn create_self_signed_keys(path: Option<&Path>) {
+pub fn create_self_signed_keys(folder: &Path) -> anyhow::Result<Identity> {
     let mut csprng = rand_core::OsRng;
     let key = ed25519_dalek::SigningKey::generate(&mut csprng);
-    // key.serialize()
+    let key_bytes = key.to_keypair_bytes();
+
+    // confirm folder exists
+    if !std::fs::exists(folder).unwrap_or(false) {
+        return Err(anyhow::anyhow!("Folder {:?} does not exist.", &folder));
+    }
+
+    let secret_bytes = &key_bytes[..ed25519_dalek::SECRET_KEY_LENGTH];
+    {
+        let path = folder.join(KEY_FILE_NAME);
+
+        let secret_pem = pem::Pem::new("PRIVATE KEY", secret_bytes);
+        std::fs::write(path, pem::encode(&secret_pem))?;
+    }
+
+    let public_bytes = &key_bytes[ed25519_dalek::SECRET_KEY_LENGTH..];
+    {
+        let path = folder.join(KEY_FILE_NAME);
+
+        let public_pem = pem::Pem::new("CERTIFICATE", public_bytes);
+        std::fs::write(path, pem::encode(&public_pem))?;
+    }
+
+    Ok(Identity::from_pem(public_bytes, secret_bytes))
+}
+
+pub fn read_self_signed_keys(folder: &Path) -> Option<Identity> {
+    let cert = {
+        let path = folder.join("cert.pem");
+        std::fs::read_to_string(path).ok()?
+    };
+    let key = {
+        let path = folder.join("key.pem");
+        std::fs::read_to_string(path).ok()?
+    };
+
+    Some(Identity::from_pem(cert, key))
 }
