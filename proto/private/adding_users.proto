@@ -1,0 +1,22 @@
+syntax = "proto3";
+package adding_users;
+
+import "../public/joining.proto"
+
+service AddingUsers {
+	rpc AddUser (ServerClientAdd) returns (ServerClientAddReply);
+}
+
+message ServerSignJoinRequest {
+	bytes ip = 1;
+	bytes verification_key = 2;
+}
+
+message ServerClientAdd {
+    ClientJoinRequestMessage client_request = 1;
+    repeated ServerSignJoinRequest signed_messages = 2;
+}
+
+message ServerClientAddReply {
+    repeated ServerSignJoinRequest signed_messages = 1;
+}

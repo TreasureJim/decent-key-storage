@@ -1,0 +1,21 @@
+syntax = "proto3";
+package joining_network;
+
+service Joining {
+	rpc JoinRequest (ClientJoinRequestMessage) returns (ClientJoinRequestReply);
+}
+
+message ClientJoinRequestMessage {
+    bytes joining_key = 1;
+    bytes public_key = 2;
+    bytes verification_key = 3;
+}
+
+message ClientJoinRequestReply {
+	enum STATUS {
+		BAD_JOINING_KEY = 0;
+		PROPOGATION_FAILED = 1;
+	}
+
+	STATUS status = 1;
+}
