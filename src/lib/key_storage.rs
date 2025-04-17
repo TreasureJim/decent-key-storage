@@ -18,11 +18,11 @@ pub enum KeyStorageError {
 
 #[derive(Debug)]
 pub struct KeyStorage {
-    hosts: HashMap<String, Host>,
+    hosts: HashMap<String, Certificate>,
 }
 
 #[derive(Debug)]
-pub struct Host {
+pub struct Certificate {
     pub encryption_scheme: String,
     pub public_key: Vec<u8>,
 }
@@ -44,7 +44,7 @@ impl KeyStorage {
                 continue;
             };
 
-            let host = Host {
+            let host = Certificate {
                 encryption_scheme: words
                     .next()
                     .ok_or(KeyStorageError::ParsingMissingEncryptionScheme)?
@@ -69,7 +69,7 @@ impl KeyStorage {
 
         for (
             host_name,
-            Host {
+            Certificate {
                 encryption_scheme,
                 public_key,
             },
@@ -88,11 +88,11 @@ impl KeyStorage {
 }
 
 impl KeyStorage {
-    pub fn add_host(&mut self, host_name: String, host: Host) {
+    pub fn add_host(&mut self, host_name: String, host: Certificate) {
         self.hosts.insert(host_name, host);
     }
 
-    pub fn get_host_key(&self, host_name: String) -> Option<&Host> {
+    pub fn get_host_key(&self, host_name: String) -> Option<&Certificate> {
         self.hosts.get(&host_name)
     }
 
