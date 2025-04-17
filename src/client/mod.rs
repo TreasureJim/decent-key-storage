@@ -1,19 +1,11 @@
-mod channel;
-mod custom_tls;
-mod global;
-mod connection;
-
-pub mod pb {
+/* pub mod pb {
     tonic::include_proto!("helloworld");
 }
 
 use http::Uri;
 use std::{fs::read_to_string, path::PathBuf, sync::Arc};
-use tonic::client::GrpcService;
 
 use clap::Parser;
-
-use channel::Channel;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -48,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
 
     let known_host_tls_config = rustls::ClientConfig::builder()
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(custom_tls::KnownHostsTls::new(
+        .with_custom_certificate_verifier(Arc::new(lib::custom_tls::KnownHostsTls::new(
             known_hosts.get_host_keys(args.uri.to_string()),
         )))
         .with_no_client_auth();
@@ -88,4 +80,8 @@ async fn main() -> anyhow::Result<()> {
     // println!("RESPONSE={:?}", response);
 
     Ok(())
+} */
+
+fn main() {
+    todo!();
 }
