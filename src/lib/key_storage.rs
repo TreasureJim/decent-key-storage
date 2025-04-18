@@ -1,41 +1,70 @@
-use tonic::transport::{CertificateDer, Identity};
 use base64::Engine;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
 use thiserror::Error;
+use tonic::transport::{CertificateDer, Identity};
+use x509_parser::prelude::X509Certificate;
+
+/*
+* certicates.json
+*
+* -------------
+* {
+*   nodes: [
+*       {
+*           uiud: Uuid,
+*           cert_file: Path,
+*           received: TimeStamp,
+*           signed_by: VerificationSignature (bytes)
+*       }
+*   ]
+* }
+*/
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct NodeCertContainer {
+    uuid: uuid::Uuid,
+    cert_file: PathBuf,
+
+    #[serde(skip_serializing)]
+    raw_cert: Option<Vec<u8>>,
+
+    received_at: std::time::SystemTime,
+    signed_by: Option<(uuid::Uuid, Vec<u8>)>,
+}
 
 #[derive(Debug, Error)]
 pub enum KeyStorageError {
-    #[error("Encryption scheme was missing in the line during parsing")]
-    ParsingMissingEncryptionScheme,
-    #[error("Public key was missing in the line during parsing")]
-    ParsingMissingPublicKey,
-    #[error("Decoding public key")]
-    DecodingPublicKey,
+    #[error("Could not access folder containing data")]
+    FolderAccess,
+    #[error("IO error for certs.json file: {0:?}")]
+    CertJsonIO(std::io::Error),
+    #[error("Parsing certs.json file")]
+    CertJsonParsing
 }
 
 #[derive(Debug)]
-pub struct KeyStorage<'a> {
-    hosts: HashMap<String, CertificateDer<'a>>,
+pub struct KeyStorage {
+    folder: PathBuf,
+    hosts: HashMap<uuid::Uuid, NodeCertContainer>,
 }
 
-#[derive(Debug)]
-pub struct Certificate {
-    pub encryption_scheme: String,
-    pub public_key: Vec<u8>,
-}
-
-impl<'a> KeyStorage<'a> {
-    pub fn empty_hosts() -> Self {
-        Self {
-            hosts: HashMap::new(),
+impl KeyStorage {
+    pub fn empty_hosts(folder: &Path) -> Result<Self, KeyStorageError> {
+        if !folder.exists() {
+            return Err(KeyStorageError::FolderAccess);
         }
+
+        Ok(Self {
+            folder: folder.to_path_buf(),
+            hosts: HashMap::new(),
+        })
     }
 
-    pub fn deserialise_hosts(s: String) -> Result<KeyStorage<'a>, KeyStorageError> {
-        let mut known_hosts = KeyStorage::empty_hosts();
+    pub fn read_certs(&mut self) -> Result<KeyStorage, KeyStorageError> {
+        
 
         for line in s.lines() {
             let mut words = line.split_whitespace();
@@ -64,26 +93,18 @@ impl<'a> KeyStorage<'a> {
         Ok(known_hosts)
     }
 
-    pub fn serialise_hosts(&self) -> String {
-        let mut file_string = String::new();
+    pub fn save_certs(&self) -> Result<(), KeyStorageError> {
+        let cert_containers: Vec<_> = self.hosts.values().collect();
 
-        for (
-            host_name,
-            Certificate {
-                encryption_scheme,
-                public_key,
-            },
-        ) in &self.hosts
+        // certs.json
         {
-            file_string.push_str(&format!(
-                "{} {} {}\n",
-                host_name,
-                encryption_scheme,
-                base64::engine::general_purpose::STANDARD.encode(public_key)
-            ));
+            let cert_json_str = serde_json::to_string(&cert_containers).unwrap();
+            std::fs::write(self.folder.join("certs.json"), &cert_json_str).map_err(|e| KeyStorageError::CertJsonIO(e))?;
         }
 
-        file_string
+        // pem cert files
+
+        Ok(())
     }
 }
 
