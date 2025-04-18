@@ -1,4 +1,4 @@
-use tonic::transport::Identity;
+use tonic::transport::{CertificateDer, Identity};
 use base64::Engine;
 use std::{
     collections::HashMap,
@@ -17,8 +17,8 @@ pub enum KeyStorageError {
 }
 
 #[derive(Debug)]
-pub struct KeyStorage {
-    hosts: HashMap<String, Certificate>,
+pub struct KeyStorage<'a> {
+    hosts: HashMap<String, CertificateDer<'a>>,
 }
 
 #[derive(Debug)]
@@ -27,14 +27,14 @@ pub struct Certificate {
     pub public_key: Vec<u8>,
 }
 
-impl KeyStorage {
+impl<'a> KeyStorage<'a> {
     pub fn empty_hosts() -> Self {
         Self {
             hosts: HashMap::new(),
         }
     }
 
-    pub fn deserialise_hosts(s: String) -> Result<KeyStorage, KeyStorageError> {
+    pub fn deserialise_hosts(s: String) -> Result<KeyStorage<'a>, KeyStorageError> {
         let mut known_hosts = KeyStorage::empty_hosts();
 
         for line in s.lines() {
@@ -87,7 +87,7 @@ impl KeyStorage {
     }
 }
 
-impl KeyStorage {
+impl KeyStorage<'a> {
     pub fn add_host(&mut self, host_name: String, host: Certificate) {
         self.hosts.insert(host_name, host);
     }
