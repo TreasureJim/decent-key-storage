@@ -1,157 +1,169 @@
 use base64::Engine;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
+    collections::HashMap, fs, path::{Path, PathBuf}
 };
 use thiserror::Error;
 use tonic::transport::{CertificateDer, Identity};
 use x509_parser::prelude::X509Certificate;
 
-/*
-* certicates.json
-*
-* -------------
-* {
-*   nodes: [
-*       {
-*           uiud: Uuid,
-*           cert_file: Path,
-*           received: TimeStamp,
-*           signed_by: VerificationSignature (bytes)
-*       }
-*   ]
-* }
-*/
+use crate::keys::{CertificateData, NodeCertificate};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct NodeCertContainer {
-    uuid: uuid::Uuid,
-    cert_file: PathBuf,
 
-    #[serde(skip_serializing)]
-    raw_cert: Option<Vec<u8>>,
-
-    received_at: std::time::SystemTime,
-    signed_by: Option<(uuid::Uuid, Vec<u8>)>,
+#[derive(Debug)]
+pub struct KeyStorage {
+    storage_dir: PathBuf,
+    certificates: HashMap<uuid::Uuid, NodeCertificate>,
+    cert_data: HashMap<uuid::Uuid, CertificateData>,
 }
 
 #[derive(Debug, Error)]
 pub enum KeyStorageError {
-    #[error("Could not access folder containing data")]
-    FolderAccess,
-    #[error("IO error for certs.json file: {0:?}")]
-    CertJsonIO(std::io::Error),
-    #[error("Parsing certs.json file")]
-    CertJsonParsing
-}
+    #[error("Storage directory error: {0}")]
+    DirectoryError(#[from] std::io::Error),
+    
+    #[error("Certificate {0} not found")]
+    CertificateNotFound(Uuid),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(#[from] serde_json::Error),
 
-#[derive(Debug)]
-pub struct KeyStorage {
-    folder: PathBuf,
-    hosts: HashMap<uuid::Uuid, NodeCertContainer>,
+    #[error("Invalid pem certificate file: {0:?}")]
+    InvalidPemFile(#[from] pem::PemError),
+    
+    #[error("Invalid certificate data from {0}: {1}")]
+    InvalidCertificateData(Uuid, x509_parser::error::X509Error),
+    
+    #[error("Certificate already exists: {0}")]
+    DuplicateCertificate(Uuid),
+    
+    #[error("Certificate file missing for {0}")]
+    MissingCertificateFile(Uuid),
 }
 
 impl KeyStorage {
-    pub fn empty_hosts(folder: &Path) -> Result<Self, KeyStorageError> {
-        if !folder.exists() {
-            return Err(KeyStorageError::FolderAccess);
+    /// Initialize and load all certificate data
+    pub fn new(storage_dir: impl AsRef<Path>) -> Result<Self, KeyStorageError> {
+        let storage_dir = storage_dir.as_ref().to_path_buf();
+        
+        // Create directories if they don't exist
+        fs::create_dir_all(&storage_dir)?;
+        fs::create_dir_all(storage_dir.join("certs"))?;
+        
+        // Load metadata
+        let certificates = if storage_dir.join("certs.json").exists() {
+            Self::load_metadata(&storage_dir)?
+        } else {
+            HashMap::new()
+        };
+        
+        // Pre-load all certificate data
+        let mut cert_data = HashMap::new();
+        for (uuid, _) in &certificates {
+            let data = Self::load_cert_file(&storage_dir, *uuid)?;
+            cert_data.insert(*uuid, data);
         }
-
+        
         Ok(Self {
-            folder: folder.to_path_buf(),
-            hosts: HashMap::new(),
+            storage_dir,
+            certificates,
+            cert_data,
         })
     }
-
-    pub fn read_certs(&mut self) -> Result<KeyStorage, KeyStorageError> {
-        
-
-        for line in s.lines() {
-            let mut words = line.split_whitespace();
-
-            let Some(host_name) = words.next() else {
-                continue;
-            };
-
-            let host = Certificate {
-                encryption_scheme: words
-                    .next()
-                    .ok_or(KeyStorageError::ParsingMissingEncryptionScheme)?
-                    .to_string(),
-                public_key: base64::engine::general_purpose::STANDARD
-                    .decode(
-                        words
-                            .next()
-                            .ok_or(KeyStorageError::ParsingMissingPublicKey)?,
-                    )
-                    .map_err(|_| KeyStorageError::DecodingPublicKey)?,
-            };
-
-            known_hosts.add_host(host_name.to_string(), host);
+    
+    /// Add a new certificate (saves to disk immediately)
+    pub fn add_certificate(
+        &mut self,
+        uuid: Uuid,
+        raw_cert: CertificateData,
+        received_at: std::time::SystemTime,
+    ) -> Result<(), KeyStorageError> {
+        if self.certificates.contains_key(&uuid) {
+            return Err(KeyStorageError::DuplicateCertificate(uuid));
         }
+        
+        let cert_path = self.cert_path(uuid);
 
-        Ok(known_hosts)
+        // Store to disk first
+        {
+            fs::write(&cert_path, raw_cert.to_pem())?;
+        }
+        
+        // Update in-memory state
+        let cert = NodeCertificate {
+            uuid,
+            cert_path,
+            received_at,
+        };
+        
+        self.certificates.insert(uuid, cert);
+        self.cert_data.insert(uuid, raw_cert);
+        self.save_metadata()?;
+        
+        Ok(())
+    }
+    
+    // Get certificate metadata
+    pub fn get_certificate(&self, uuid: Uuid) -> Result<&NodeCertificate, KeyStorageError> {
+        self.certificates.get(&uuid)
+            .ok_or(KeyStorageError::CertificateNotFound(uuid))
+    }
+    
+    // Get certificate data (already loaded)
+    pub fn get_cert_data(&self, uuid: Uuid) -> Result<&CertificateData, KeyStorageError> {
+        self.cert_data.get(&uuid)
+            .ok_or(KeyStorageError::CertificateNotFound(uuid))
+    }
+    
+    // List all certificate UUIDs
+    pub fn list_certificates(&self) -> Vec<Uuid> {
+        self.certificates.keys().cloned().collect()
     }
 
-    pub fn save_certs(&self) -> Result<(), KeyStorageError> {
-        let cert_containers: Vec<_> = self.hosts.values().collect();
-
-        // certs.json
-        {
-            let cert_json_str = serde_json::to_string(&cert_containers).unwrap();
-            std::fs::write(self.folder.join("certs.json"), &cert_json_str).map_err(|e| KeyStorageError::CertJsonIO(e))?;
+    // Private helpers
+    
+    fn cert_path(&self, uuid: Uuid) -> PathBuf {
+        self.storage_dir.join("certs").join(format!("{}.pem", uuid))
+    }
+    
+    fn load_metadata(storage_dir: &Path) -> Result<HashMap<Uuid, NodeCertificate>, KeyStorageError> {
+        let metadata_path = storage_dir.join("certs.json");
+        if !metadata_path.exists() {
+            return Ok(HashMap::new());
         }
-
-        // pem cert files
-
+        
+        let file = fs::File::open(metadata_path)?;
+        let mut certs: HashMap<Uuid, NodeCertificate> = serde_json::from_reader(file)?;
+        
+        // Rebuild paths for loaded certificates
+        for (uuid, cert) in certs.iter_mut() {
+            cert.cert_path = storage_dir.join("certs").join(format!("{}.pem", uuid));
+        }
+        
+        Ok(certs)
+    }
+    
+    fn load_cert_file(storage_dir: &Path, uuid: Uuid) -> Result<CertificateData, KeyStorageError> {
+        let cert_path = storage_dir.join("certs").join(format!("{}.pem", uuid));
+        if !cert_path.exists() {
+            return Err(KeyStorageError::MissingCertificateFile(uuid));
+        }
+        
+        let pem_string = fs::read(&cert_path)?;
+        Ok(CertificateData::from_pem(pem_string)?)
+    }
+    
+    fn save_metadata(&self) -> Result<(), KeyStorageError> {
+        let metadata_path = self.storage_dir.join("certs.json");
+        let file = fs::File::create(metadata_path)?;
+        serde_json::to_writer_pretty(file, &self.certificates)?;
         Ok(())
     }
 }
 
-impl KeyStorage<'a> {
-    pub fn add_host(&mut self, host_name: String, host: Certificate) {
-        self.hosts.insert(host_name, host);
-    }
-
-    pub fn get_host_key(&self, host_name: String) -> Option<&Certificate> {
-        self.hosts.get(&host_name)
-    }
-
-    pub fn get_host_keys(&self, host_name: String) -> Vec<Vec<u8>> {
-        if let Some(host) = self.hosts.get(&host_name) {
-            vec![host.public_key.clone()]
-        } else {
-            vec![]
-        }
-    }
-}
-
-pub static DEFAULT_DATA_LOCATION: &str = "~/.local/decent-key-storage";
-pub static HOSTS_FILE_NAME: &str = "known_hosts";
-pub static KEY_FILE_NAME: &str = "key.pem";
-pub static CERT_FILE_NAME: &str = "cert.pem";
-
-/// Finds the default location of the known_hosts. If it doesn't exist, it creates it.
-pub fn default_storage_file() -> Result<PathBuf, std::io::Error> {
-    let mut path = PathBuf::new();
-    path.push(DEFAULT_DATA_LOCATION);
-    path.push(HOSTS_FILE_NAME);
-
-    let exists = std::fs::exists(&path)?;
-    if !exists {
-        std::fs::create_dir_all(
-            path.parent()
-                .expect("Default location should always be able to get the parent directory."),
-        )
-        .expect("Couldn't create default storage folder");
-        std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(&path)?;
-    }
-
-    Ok(path.clone())
-}
+const KEY_FILE_NAME: &str = "key.pem";
+const CERT_FILE_NAME: &str = "cert.pem";
 
 pub fn create_self_signed_keys(folder: &Path) -> anyhow::Result<Identity> {
     let mut csprng = rand_core::OsRng;
@@ -173,7 +185,7 @@ pub fn create_self_signed_keys(folder: &Path) -> anyhow::Result<Identity> {
 
     let public_bytes = &key_bytes[ed25519_dalek::SECRET_KEY_LENGTH..];
     {
-        let path = folder.join(KEY_FILE_NAME);
+        let path = folder.join(CERT_FILE_NAME);
 
         let public_pem = pem::Pem::new("CERTIFICATE", public_bytes);
         std::fs::write(path, pem::encode(&public_pem))?;
@@ -182,15 +194,15 @@ pub fn create_self_signed_keys(folder: &Path) -> anyhow::Result<Identity> {
     Ok(Identity::from_pem(public_bytes, secret_bytes))
 }
 
-pub fn read_self_signed_keys(folder: &Path) -> Option<Identity> {
+pub fn read_self_signed_keys(folder: &Path) -> Result<Identity, std::io::Error> {
     let cert = {
-        let path = folder.join("cert.pem");
-        std::fs::read_to_string(path).ok()?
+        let path = folder.join(CERT_FILE_NAME);
+        std::fs::read_to_string(path)?
     };
     let key = {
-        let path = folder.join("key.pem");
-        std::fs::read_to_string(path).ok()?
+        let path = folder.join(KEY_FILE_NAME);
+        std::fs::read_to_string(path)?
     };
 
-    Some(Identity::from_pem(cert, key))
+    Ok(Identity::from_pem(cert, key))
 }

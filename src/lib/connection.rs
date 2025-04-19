@@ -6,7 +6,7 @@ use http::Uri;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tokio_rustls::TlsConnector;
 
-use crate::{custom_tls::CaptureErrors, key_storage::Certificate, HostPort};
+use crate::{custom_tls::CaptureErrors, keys::CertificateData, HostPort};
 
 #[derive(Error, Debug)]
 pub enum ConnectionError {
@@ -24,7 +24,7 @@ impl From<std::io::Error> for ConnectionError {
     }
 }
 
-pub async fn connect_and_get_cert(target: &HostPort) -> Result<Certificate, ConnectionError> {
+pub async fn connect_and_get_cert(target: &HostPort) -> Result<CertificateData, ConnectionError> {
     let (cert_capturer, cert_listener) = crate::custom_tls::CertTlsCapturer::new();
     let unsafe_tls_config = rustls::ClientConfig::builder()
         .dangerous()
@@ -180,7 +180,7 @@ mod tests {
         let host = connect_and_get_cert(&target)
             .await
             .expect("Failed to get cert");
-        assert_eq!(host.public_key, public_key.raw);
+        assert_eq!(&*host, public_key.raw);
     }
 
     #[tokio::test]

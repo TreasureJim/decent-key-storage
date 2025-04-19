@@ -5,21 +5,13 @@ use std::sync::mpsc::{Receiver, Sender};
 use x509_parser::{oid_registry, prelude::FromDer};
 use thiserror::Error;
 
-use crate::{key_storage::Certificate, keys::Key};
+use crate::keys::CertificateData;
+
+pub type CaptureErrors = x509_parser::prelude::X509Error;
 
 static OID_REGISTRY: Lazy<oid_registry::OidRegistry> = Lazy::new(|| {
         oid_registry::OidRegistry::default().with_x509()
 });
-
-#[derive(Error, Debug)]
-pub enum CaptureErrors {
-    #[error("x509 certificate parsing failed")]
-    Parsing,
-    #[error("Could not identify the algorithm with Oid {oid:?})")]
-    UnidentifiedAlgorithm {
-        oid: String
-    }
-}
 
 pub fn supported_verif_algs() -> Vec<SignatureScheme> {
     rustls::crypto::CryptoProvider::get_default().unwrap().signature_verification_algorithms.supported_schemes()
@@ -27,11 +19,11 @@ pub fn supported_verif_algs() -> Vec<SignatureScheme> {
 
 #[derive(Debug)]
 pub struct CertTlsCapturer {
-    cert_transmitter: Sender<Result<Certificate, CaptureErrors>>,
+    cert_transmitter: Sender<Result<CertificateData, CaptureErrors>>,
 }
 
 impl CertTlsCapturer {
-    pub fn new() -> (Self, Receiver<Result<Certificate, CaptureErrors>>) {
+    pub fn new() -> (Self, Receiver<Result<CertificateData, CaptureErrors>>) {
         let (tx, rx) = std::sync::mpsc::channel();
 
         (
@@ -42,23 +34,8 @@ impl CertTlsCapturer {
         )
     }
 
-    fn capture_cert(&self, data: &[u8]) {
-        let Ok((_, cert)) = x509_parser::prelude::X509Certificate::from_der(data) else {
-            self.cert_transmitter.send(Err(CaptureErrors::Parsing)).unwrap();
-            return;
-        };
-    
-        let Ok(alg) = x509_parser::prelude::oid2sn(&cert.signature.algorithm, &OID_REGISTRY) else {
-            self.cert_transmitter.send(Err(CaptureErrors::UnidentifiedAlgorithm { oid: cert.signature.algorithm.to_id_string() })).unwrap();
-            return;
-        };
-
-        self.cert_transmitter.send(Ok(
-            Certificate {
-                encryption_scheme: alg.to_string(),
-                public_key: cert.public_key().raw.to_vec()
-            }
-        )).unwrap();
+    fn capture_cert(&self, cert: &tonic::transport::CertificateDer<'_>) {
+        self.cert_transmitter.send(CertificateData::new(cert)).unwrap();
     }
 }
 
@@ -71,7 +48,7 @@ impl ServerCertVerifier for CertTlsCapturer {
         _ocsp_response: &[u8],
         _now: rustls::pki_types::UnixTime,
     ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
-        self.capture_cert(&end_entity.to_vec());
+        self.capture_cert(end_entity);
         Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
 
