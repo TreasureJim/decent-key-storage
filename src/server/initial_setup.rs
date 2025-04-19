@@ -1,5 +1,4 @@
 use futures::stream::FuturesUnordered;
-use http::Uri;
 use lib::{connection::ConnectionError, key_storage::KeyStorage, keys::key_fingerprint_b64, HostPort};
 use tokio_stream::StreamExt;
 use thiserror::Error;
@@ -37,14 +36,15 @@ pub async fn contact_servers(
             println!(
                 "Key fingerprint from {:?} is {:?}\nDoes this fingerprint match? (y)es/(n)o",
                 &host.host,
-                key_fingerprint_b64(&cert.public_key)
+                key_fingerprint_b64(&*cert)
             );
 
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
             match input.trim_end() {
                 "y" | "yes" => {
-                    key_store.add_host(host.host, cert);
+                    todo!();
+                    // key_store.add_certificate(host.host, cert);
                     break;
                 }
                 "n" | "no" => {
@@ -59,3 +59,5 @@ pub async fn contact_servers(
 
     Ok(())
 }
+
+// async fn get_server_info()
