@@ -1,12 +1,12 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 
 use tokio::net::ToSocketAddrs;
-pub mod channel;
 pub mod connection;
 pub mod custom_tls;
 pub mod key_storage;
 pub mod keys;
 pub mod tls;
+pub mod protocol;
 
 #[derive(Clone, Debug)]
 pub struct HostPort {

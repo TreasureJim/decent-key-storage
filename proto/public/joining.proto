@@ -3,6 +3,7 @@ package joining_network;
 
 service Joining {
 	rpc JoinRequest (ClientJoinRequestMessage) returns (ClientJoinRequestReply);
+	rpc 
 }
 
 message ClientJoinRequestMessage {

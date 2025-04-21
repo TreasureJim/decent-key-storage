@@ -5,6 +5,8 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use lib::protocol::info::ServerInfo;
+use lib::protocol::server_state::ServerState;
 use tokio::net::TcpListener;
 use tonic::transport::server::ServerTlsConfig;
 use tonic::transport::Identity;
@@ -23,11 +25,15 @@ struct Args {
     client_addr: SocketAddr,
 }
 
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     lib::tls::initialize().unwrap();
+
+    let info = ServerInfo::load_or_create(
+        args.data_folder.join(lib::protocol::info::SERVER_INFO_FILE),
+    )?;
+    let server_state = Arc::new(ServerState { info: info});
 
     let shutdown = Arc::new(tokio::sync::Notify::new());
 
@@ -35,8 +41,20 @@ async fn main() -> anyhow::Result<()> {
         let listener = tokio::net::TcpListener::bind(args.client_addr).await?;
         let identity = get_keys(&args.data_folder)?;
         let shutdown_cpy = Arc::clone(&shutdown);
+        let state_clone = Arc::clone(&server_state);
         tokio::spawn(async move {
-            run_server(identity, listener, shutdown_cpy.notified()).await
+            let local_addr = listener.local_addr().unwrap();
+
+            Server::builder()
+                .tls_config(ServerTlsConfig::new().identity(identity))?
+                .add_service(lib::protocol::info::protocol::server_info_server::ServerInfoServer::new(state_clone))
+                .serve_with_incoming_shutdown(
+                    tokio_stream::wrappers::TcpListenerStream::new(listener),
+                    shutdown.notified(),
+                )
+                .await?;
+            log::info!("Listening on {:?}", local_addr);
+            Ok(())
         })
     };
 
@@ -88,23 +106,4 @@ fn get_keys(folder: &Path) -> anyhow::Result<Identity> {
             ))
         }
     }
-}
-
-async fn run_server(
-    identity: tonic::transport::Identity,
-    listener: TcpListener,
-    shutdown: impl Future<Output = ()>,
-) -> anyhow::Result<()> {
-    let local_addr = listener.local_addr().unwrap();
-
-    Server::builder()
-        .tls_config(ServerTlsConfig::new().identity(identity))?
-        .add_service(GreeterServer::new(MyGreeter::default()))
-        .serve_with_incoming_shutdown(
-            tokio_stream::wrappers::TcpListenerStream::new(listener),
-            shutdown,
-        )
-        .await?;
-    log::info!("Listening on {:?}", local_addr);
-    Ok(())
 }

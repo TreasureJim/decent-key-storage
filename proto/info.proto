@@ -1,0 +1,12 @@
+syntax = "proto3";
+package info;
+
+service ServerInfo {
+	rpc GetServerInfo (ServerInfoRequest) returns (ServerInfoResponse);
+}
+
+message ServerInfoRequest {}
+
+message ServerInfoResponse {
+	string uuid = 1;
+}
