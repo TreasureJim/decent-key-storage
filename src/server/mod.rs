@@ -33,8 +33,8 @@ fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_default_env()
-        // .filter_level(log::LevelFilter::Info)
+    let env = env_logger::Env::default().default_filter_or("info");
+    env_logger::Builder::from_env(env)
         .init();
 
     let args = Args::parse();
