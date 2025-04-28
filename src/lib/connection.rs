@@ -31,12 +31,11 @@ pub async fn connect_and_get_cert(target: &HostPort) -> Result<CertificateData, 
         .with_custom_certificate_verifier(Arc::new(cert_capturer))
         .with_no_client_auth();
 
-    let tcp_stream = TcpStream::connect((target.host.clone(), target.port)).await?;
+    let tcp_stream = TcpStream::connect(&target).await?;
     let mut stream = TlsConnector::from(Arc::new(unsafe_tls_config))
         .connect(
             target
-                .host
-                .clone()
+                .ip()
                 .try_into()
                 .map_err(|_| ConnectionError::DNS)?,
             tcp_stream,
@@ -172,10 +171,7 @@ mod tests {
         let server = TestServer::new(&test_cert, &test_key).await;
 
         // Test our function
-        let target = HostPort {
-            host: "localhost".to_string(),
-            port: server.port,
-        };
+        let target = format!("{}:{}", "localhost", server.port).parse().unwrap();
 
         let host = connect_and_get_cert(&target)
             .await
@@ -188,10 +184,7 @@ mod tests {
         Lazy::force(&INIT_CRYPTO);
 
         // Test with non-existent port
-        let target = HostPort {
-            host: "localhost".to_string(),
-            port: 9999, // Assuming nothing is running here
-        };
+        let target = format!("{}:{}", "localhost", 9999).parse().unwrap();
 
         let result = connect_and_get_cert(&target).await;
         assert!(matches!(result, Err(ConnectionError::Connection(_))));
