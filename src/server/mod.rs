@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use lib::protocol::info::ServerInfo;
 use lib::protocol::server_state::ServerState;
+use lib::HostPort;
 use path_absolutize::Absolutize;
 use tonic::transport::server::ServerTlsConfig;
 use tonic::transport::Identity;
@@ -23,8 +24,8 @@ struct Args {
     data_folder: PathBuf,
     #[arg(long, value_name = "ADDR", default_value = "0.0.0.0:42000", value_parser = clap::value_parser!(SocketAddr))]
     client_addr: SocketAddr,
-    #[arg(long, value_name = "ADDRESSES")]
-    setup_network: Vec<SocketAddr>,
+    #[arg(long, value_name = "ADDRESSES", value_parser = HostPort::parse_arg)]
+    setup_network: Vec<HostPort>,
 }
 
 fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
@@ -34,7 +35,7 @@ fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let env = env_logger::Env::default().default_filter_or("info");
+    let env = env_logger::Env::default().default_filter_or("debug");
     env_logger::Builder::from_env(env)
         .init();
 

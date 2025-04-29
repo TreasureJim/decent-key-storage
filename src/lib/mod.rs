@@ -1,5 +1,7 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 
+use std::net::SocketAddr;
+
 use anyhow::Context;
 use bytes::Bytes;
 
@@ -11,11 +13,45 @@ pub mod keys;
 pub mod protocol;
 pub mod tls;
 
-pub type HostPort = std::net::SocketAddr;
-
-pub fn to_endpoint(addr: &std::net::SocketAddr) -> anyhow::Result<tonic::transport::Endpoint> {
-    tonic::transport::Endpoint::from_shared(format!("https://{}", addr)).context(format!("Failed to convert {} to a tonic endpoint", addr))
+#[derive(Clone, Copy, Debug)]
+pub struct HostPort {
+    addr: SocketAddr
 }
+
+impl HostPort {
+    pub fn new(addr: SocketAddr) -> Self {
+        Self {
+            addr
+        }
+    }
+
+    pub fn to_endpoint(&self) -> anyhow::Result<tonic::transport::Endpoint> {
+        tonic::transport::Endpoint::from_shared(self).context(format!("Failed to convert {} to a tonic endpoint", self.addr))
+    }
+
+    pub fn parse_arg(arg: &str) -> anyhow::Result<Self> {
+        Ok(arg.parse::<SocketAddr>()?.into())
+    }
+}
+
+impl Into<Bytes> for &HostPort {
+    fn into(self) -> Bytes {
+        format!("https://{}", self.addr).into()
+    }
+}
+
+impl From<SocketAddr> for HostPort {
+    fn from(value: SocketAddr) -> Self {
+        HostPort::new(value)
+    }
+}
+
+impl std::fmt::Display for HostPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.addr)
+    }
+}
+
 
 /* impl TryInto<tonic::transport::Endpoint> for &HostPort {
     type Error = tonic::transport::Error;
@@ -29,12 +65,6 @@ pub fn to_endpoint(addr: &std::net::SocketAddr) -> anyhow::Result<tonic::transpo
 pub struct HostPort {
     pub host: String,
     pub port: u16,
-}
-
-impl Into<Bytes> for &HostPort {
-    fn into(self) -> Bytes {
-        format!("{}:{}", self.host, self.port).into()
-    }
 }
 
 impl TryInto<tonic::transport::Endpoint> for &HostPort {
