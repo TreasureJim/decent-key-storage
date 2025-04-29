@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use lib::protocol::info::ServerInfo;
 use lib::protocol::server_state::ServerState;
+use path_absolutize::Absolutize;
 use tonic::transport::server::ServerTlsConfig;
 use tonic::transport::Identity;
 use tonic::transport::Server;
@@ -28,7 +29,7 @@ struct Args {
 
 fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
     let expanded = expanduser::expanduser(path)?;
-    Ok(expanded)
+    Ok(expanded.absolutize()?.into_owned())
 }
 
 #[tokio::main]
