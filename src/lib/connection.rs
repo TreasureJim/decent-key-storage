@@ -31,10 +31,10 @@ pub async fn connect_and_get_cert(target: &HostPort) -> Result<CertificateData, 
         .with_custom_certificate_verifier(Arc::new(cert_capturer))
         .with_no_client_auth();
 
-    let tcp_stream = TcpStream::connect(&target).await?;
+    let tcp_stream = TcpStream::connect(&target.addr).await?;
     let mut stream = TlsConnector::from(Arc::new(unsafe_tls_config))
         .connect(
-            target
+            target.addr
                 .ip()
                 .try_into()
                 .map_err(|_| ConnectionError::DNS)?,
@@ -63,6 +63,7 @@ mod tests {
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
     use rustls::{pki_types::pem::PemObject, ServerConfig};
     use std::mem;
+    use std::net::SocketAddr;
     use std::sync::Arc;
     use tokio::io::AsyncReadExt;
     use tokio::net::TcpListener;
@@ -171,7 +172,7 @@ mod tests {
         let server = TestServer::new(&test_cert, &test_key).await;
 
         // Test our function
-        let target = format!("{}:{}", "localhost", server.port).parse().unwrap();
+        let target = format!("{}:{}", "localhost", server.port).parse::<SocketAddr>().unwrap().into();
 
         let host = connect_and_get_cert(&target)
             .await
@@ -184,7 +185,7 @@ mod tests {
         Lazy::force(&INIT_CRYPTO);
 
         // Test with non-existent port
-        let target = format!("{}:{}", "localhost", 9999).parse().unwrap();
+        let target = format!("{}:{}", "localhost", 9999).parse::<SocketAddr>().unwrap().into();
 
         let result = connect_and_get_cert(&target).await;
         assert!(matches!(result, Err(ConnectionError::Connection(_))));
