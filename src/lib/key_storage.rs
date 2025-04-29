@@ -26,6 +26,8 @@ pub struct KeyStorage {
     storage_dir: PathBuf,
     certificates: HashMap<uuid::Uuid, NodeCertificate>,
     cert_data: HashMap<uuid::Uuid, CertificateData>,
+    // Used for quickly checking if the store includes a certificate
+    cert_map: HashMap<CertificateData, uuid::Uuid>
 }
 
 #[derive(Debug, Error)]
@@ -70,15 +72,20 @@ impl KeyStorage {
 
         // Pre-load all certificate data
         let mut cert_data = HashMap::new();
+        let mut cert_map = HashMap::new();
         for (uuid, _) in &certificates {
             let data = Self::load_cert_file(&storage_dir, *uuid)?;
+            cert_map.insert(data.clone(), *uuid);
             cert_data.insert(*uuid, data);
         }
+
+
 
         Ok(Self {
             storage_dir,
             certificates,
             cert_data,
+            cert_map 
         })
     }
 
@@ -131,6 +138,11 @@ impl KeyStorage {
     // List all certificate UUIDs
     pub fn list_certificates(&self) -> Vec<Uuid> {
         self.certificates.keys().cloned().collect()
+    }
+
+    // Confirm existence of certificate
+    pub fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
+        self.cert_map.contains_key(&CertificateData::new_no_validation(cert))
     }
 
     // Private helpers
