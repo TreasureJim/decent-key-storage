@@ -40,6 +40,12 @@ impl Into<Bytes> for &HostPort {
     }
 }
 
+impl Into<http::Uri> for &HostPort {
+    fn into(self) -> http::Uri {
+        http::Uri::builder().scheme("https").authority(self.to_string()).build().unwrap()
+    }
+}
+
 impl From<SocketAddr> for HostPort {
     fn from(value: SocketAddr) -> Self {
         HostPort::new(value)
