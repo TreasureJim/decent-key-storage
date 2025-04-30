@@ -8,7 +8,7 @@ use std::sync::{
 use thiserror::Error;
 use x509_parser::{oid_registry, prelude::FromDer};
 
-use crate::{key_storage::KeyStorage, keys::CertificateData};
+use crate::{key_storage::KeyStorage, keys::{CertificateData, HasKey}};
 
 pub type CaptureErrors = x509_parser::prelude::X509Error;
 
@@ -96,13 +96,15 @@ impl ServerCertVerifier for CertTlsCapturer {
     }
 }
 
+pub trait DebugHasKey: HasKey + std::fmt::Debug + Sync + Send {}
+
 #[derive(Debug)]
 pub struct CustomCertificateVerifier {
-    key_store: Arc<KeyStorage>,
+    key_store: Arc<dyn DebugHasKey>,
 }
 
 impl CustomCertificateVerifier {
-    pub fn new(key_store: Arc<KeyStorage>) -> Self {
+    pub fn new(key_store: Arc<dyn DebugHasKey>) -> Self {
         Self { key_store }
     }
 

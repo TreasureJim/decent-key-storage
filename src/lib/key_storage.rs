@@ -79,8 +79,6 @@ impl KeyStorage {
             cert_data.insert(*uuid, data);
         }
 
-
-
         Ok(Self {
             storage_dir,
             certificates,
