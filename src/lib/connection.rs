@@ -1,3 +1,5 @@
+use hyper_rustls::HttpsConnector;
+use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 use rustls::RootCertStore;
 use std::sync::Arc;
 use thiserror::Error;
@@ -6,7 +8,7 @@ use http::Uri;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tokio_rustls::TlsConnector;
 
-use crate::{custom_tls::CaptureErrors, keys::CertificateData, HostPort};
+use crate::{custom_tls::{CaptureErrors, DebugHasKey}, keys::CertificateData, HostPort};
 
 #[derive(Error, Debug)]
 pub enum ConnectionError {
@@ -52,6 +54,35 @@ pub async fn connect_and_get_cert(target: &HostPort) -> Result<CertificateData, 
         .map_err(|err| ConnectionError::Certificate(err))?;
 
     Ok(captured_cert)
+}
+
+pub fn cert_verif_client<B>(key_store: Arc<dyn DebugHasKey>) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
+where 
+    B: tonic::transport::Body + Send,
+    B::Data: Send
+{
+    let tls = rustls::ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(
+            crate::custom_tls::CustomCertificateVerifier::new(key_store),
+        )).with_no_client_auth();
+
+    let mut http = HttpConnector::new();
+    http.enforce_http(false);
+
+    let connector = tower::ServiceBuilder::new()
+        .layer_fn(move |s| {
+            let tls = tls.clone();
+
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .with_tls_config(tls)
+                .https_or_http()
+                .enable_http2()
+                .wrap_connector(s)
+        })
+        .service(http);
+
+    hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build::<_, B>(connector)
 }
 
 #[cfg(test)]

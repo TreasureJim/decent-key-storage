@@ -1,8 +1,7 @@
 use std::{future, sync::Arc, time::Duration};
 
 use anyhow::Context;
-use futures::{sink::Send, stream::FuturesUnordered, StreamExt, TryStreamExt};
-use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
+use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use lib::{
     connection::ConnectionError,
     custom_tls::DebugHasKey,
@@ -12,7 +11,6 @@ use lib::{
     HostPort,
 };
 use thiserror::Error;
-use tonic::transport::Channel;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -124,18 +122,9 @@ impl HasKey for SingleKey {
 impl DebugHasKey for SingleKey {}
 
 async fn get_server_info(server: &HostPort, cert: &CertificateData) -> anyhow::Result<ServerInfo> {
-    const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
+    let single_key = Arc::new(SingleKey(cert.clone()));
 
-    let single_key = Arc::new(SingleKey(*cert));
-
-    let tls = rustls::ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(
-            lib::custom_tls::CustomCertificateVerifier::new(single_key),
-        )).with_no_client_auth();
-
-    let mut http = HttpConnector::new();
-    http.enforce_http(false);
+    let client = lib::connection::cert_verif_client(single_key);
 
     let mut client =
         lib::protocol::info::protocol::server_info_client::ServerInfoClient::with_origin(client, server.into());
