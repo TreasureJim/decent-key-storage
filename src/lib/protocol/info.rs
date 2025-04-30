@@ -9,6 +9,8 @@ pub mod service {
     use super::protocol::server_info_server::ServerInfo;
     use tonic::{Request, Response, Status};
 
+    use tonic::body::Body;
+
     #[derive(Debug)]
     pub struct InformationService {
         state: Arc<ServerState>,
@@ -17,6 +19,10 @@ pub mod service {
     impl InformationService {
         pub fn new(state: Arc<ServerState>) -> Self {
             Self { state }
+        }
+        
+        pub fn server(state: Arc<ServerState>) -> super::protocol::server_info_server::ServerInfoServer<Self> {
+            super::protocol::server_info_server::ServerInfoServer::new(Self::new(state))
         }
     }
 
@@ -34,7 +40,7 @@ pub mod service {
     }
 }
 
-use std::{path::{Path, PathBuf}, sync::Arc};
+use std::{path::{Path, PathBuf}, str::FromStr, sync::Arc};
 use uuid::Uuid;
 use anyhow::Context;
 use serde::{Serialize, Deserialize};
@@ -46,6 +52,14 @@ pub const SERVER_INFO_FILE: &str = "info.json";
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServerInfo {
     pub uuid: uuid::Uuid,
+}
+
+impl From<protocol::ServerInfoResponse> for ServerInfo {
+    fn from(value: protocol::ServerInfoResponse) -> Self {
+        Self {
+            uuid: Uuid::from_str(&value.uuid).expect("Invalid UUID")
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -146,26 +160,29 @@ impl ServerInfo {
     }
 
     /// Saves server info to file
-    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), ServerInfoError> {
-        let path = path.as_ref();
-        log::debug!("Saving server info to {}", path.display());
+pub fn save(&self, path: impl AsRef<Path>) -> Result<(), ServerInfoError> {
+    let path = path.as_ref();
+    log::debug!("Saving server info to {}", path.display());
 
-        let json = serde_json::to_string_pretty(self).map_err(|source| {
-            log::error!("JSON serialization failed: {}", source);
-            ServerInfoError::ParseFailed {
-                path: path.to_path_buf(),
-                source,
-            }
-        })?;
-
-        fs::write(path, json).map_err(|source| {
-            log::error!("File write failed for {}: {}", path.display(), source);
+    // Create parent directories if needed
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            log::error!("Directory creation failed: {}", source);
             ServerInfoError::WriteFailed {
                 path: path.to_path_buf(),
                 source,
             }
-        })
+        })?;
     }
+
+    let json = serde_json::to_string_pretty(self).unwrap();
+    
+    fs::write(path, json).map_err(|source| {
+        ServerInfoError::WriteFailed {
+            path: path.to_path_buf(),
+            source,
+        }
+    })
 }
 
 /// Serializes ServerInfo to JSON file
@@ -194,4 +211,5 @@ pub fn load_server_info(path: impl AsRef<Path>) -> anyhow::Result<ServerInfo> {
             path.as_ref().display()
         )
     })
+}
 }
