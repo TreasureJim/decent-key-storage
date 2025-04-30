@@ -42,7 +42,7 @@ impl Into<Bytes> for &HostPort {
 
 impl Into<http::Uri> for &HostPort {
     fn into(self) -> http::Uri {
-        http::Uri::builder().scheme("https").authority(self.to_string()).build().unwrap()
+        http::Uri::builder().scheme("https").authority(self.to_string()).path_and_query("/").build().unwrap()
     }
 }
 
