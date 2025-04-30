@@ -20,7 +20,11 @@ pub struct NodeCertificate {
     // signed_by: Option<SignatureInfo>,  // To be implemented later
 }
 
-#[derive(Debug)]
+pub trait HasKey {
+    fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool;
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct CertificateData {
     raw_der: Vec<u8>,
 }
@@ -28,9 +32,13 @@ pub struct CertificateData {
 impl CertificateData {
     pub fn new(der: &CertificateDer<'_>) -> Result<Self, x509_parser::error::X509Error> {
         Self::validate_certificate_data(&**der)?;
-        Ok(Self {
+        Ok(Self::new_no_validation(der))
+    }
+
+    pub fn new_no_validation(der: &CertificateDer<'_>) -> Self {
+        Self {
             raw_der: der.to_vec()
-        })
+        }
     }
 
     pub fn to_pem(&self) -> String {
@@ -56,6 +64,10 @@ impl CertificateData {
     fn validate_certificate_data<'a>(raw_cert: impl Into<&'a [u8]>) -> Result<(), x509_parser::error::X509Error> {
         x509_parser::parse_x509_certificate(raw_cert.into())?;
         Ok(())
+    }
+
+    pub fn raw(&self) -> &[u8] {
+        &self.raw_der
     }
 }
 
