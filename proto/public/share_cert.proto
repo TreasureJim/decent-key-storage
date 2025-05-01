@@ -1,0 +1,18 @@
+syntax = "proto3";
+package certs;
+
+service CertSharing {
+	rpc get_certificates (RequestCertificates) returns (ResponseCertificates);
+}
+
+message RequestCertificates { }
+
+message ResponseCertificates {
+	message Certificate {
+		string uuid = 1;
+		string ip = 2;
+		bytes cert = 3;
+	}
+
+	repeated Certificate certificates = 1;
+}
