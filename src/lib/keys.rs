@@ -11,8 +11,14 @@ pub fn key_fingerprint_b64(key: impl AsRef<[u8]>) -> String {
     base64::engine::general_purpose::STANDARD.encode(hash)
 }
 
+#[derive(Debug)]
+pub struct CertWithMetadata<'a> {
+    pub cert: &'a CertificateData,
+    pub metadata: &'a NodeInfo
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct NodeCertificate {
+pub struct NodeInfo {
     pub uuid: Uuid,
     #[serde(skip_serializing)]
     pub cert_path: PathBuf,  // Will be derived from uuid

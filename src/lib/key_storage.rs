@@ -19,15 +19,15 @@ use uuid::Uuid;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::X509Certificate;
 
-use crate::keys::{CertificateData, NodeCertificate};
+use crate::keys::{NodeInfo, CertWithMetadata, CertificateData};
 
 #[derive(Debug)]
 pub struct KeyStorage {
     storage_dir: PathBuf,
-    certificates: HashMap<uuid::Uuid, NodeCertificate>,
+    node_info: HashMap<uuid::Uuid, NodeInfo>,
     cert_data: HashMap<uuid::Uuid, CertificateData>,
     // Used for quickly checking if the store includes a certificate
-    cert_map: HashMap<CertificateData, uuid::Uuid>
+    cert_map: HashMap<CertificateData, uuid::Uuid>,
 }
 
 #[derive(Debug, Error)]
@@ -81,9 +81,9 @@ impl KeyStorage {
 
         Ok(Self {
             storage_dir,
-            certificates,
+            node_info: certificates,
             cert_data,
-            cert_map 
+            cert_map,
         })
     }
 
@@ -94,7 +94,7 @@ impl KeyStorage {
         raw_cert: CertificateData,
         received_at: std::time::SystemTime,
     ) -> Result<(), KeyStorageError> {
-        if self.certificates.contains_key(&uuid) {
+        if self.node_info.contains_key(&uuid) {
             return Err(KeyStorageError::DuplicateCertificate(uuid));
         }
 
@@ -106,24 +106,17 @@ impl KeyStorage {
         }
 
         // Update in-memory state
-        let cert = NodeCertificate {
+        let cert = NodeInfo {
             uuid,
             cert_path,
             received_at,
         };
 
-        self.certificates.insert(uuid, cert);
+        self.node_info.insert(uuid, cert);
         self.cert_data.insert(uuid, raw_cert);
         self.save_metadata()?;
 
         Ok(())
-    }
-
-    // Get certificate metadata
-    pub fn get_certificate(&self, uuid: Uuid) -> Result<&NodeCertificate, KeyStorageError> {
-        self.certificates
-            .get(&uuid)
-            .ok_or(KeyStorageError::CertificateNotFound(uuid))
     }
 
     // Get certificate data (already loaded)
@@ -135,12 +128,27 @@ impl KeyStorage {
 
     // List all certificate UUIDs
     pub fn list_certificates(&self) -> Vec<Uuid> {
-        self.certificates.keys().cloned().collect()
+        self.node_info.keys().cloned().collect()
+    }
+
+    pub fn get_certificates(&self) -> Vec<CertWithMetadata> {
+        self.cert_map.iter().map(|(cert, uuid)| {
+            let metadata = self
+                .node_info
+                .get(uuid)
+                .expect("Cert store had metadata loaded but not cert");
+
+            CertWithMetadata {
+                cert,
+                metadata
+            }
+        }).collect()
     }
 
     // Confirm existence of certificate
     pub fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
-        self.cert_map.contains_key(&CertificateData::new_no_validation(cert))
+        self.cert_map
+            .contains_key(&CertificateData::new_no_validation(cert))
     }
 
     // Private helpers
@@ -149,16 +157,14 @@ impl KeyStorage {
         self.storage_dir.join("certs").join(format!("{}.pem", uuid))
     }
 
-    fn load_metadata(
-        storage_dir: &Path,
-    ) -> Result<HashMap<Uuid, NodeCertificate>, KeyStorageError> {
+    fn load_metadata(storage_dir: &Path) -> Result<HashMap<Uuid, NodeInfo>, KeyStorageError> {
         let metadata_path = storage_dir.join("certs.json");
         if !metadata_path.exists() {
             return Ok(HashMap::new());
         }
 
         let file = fs::File::open(metadata_path)?;
-        let mut certs: HashMap<Uuid, NodeCertificate> = serde_json::from_reader(file)?;
+        let mut certs: HashMap<Uuid, NodeInfo> = serde_json::from_reader(file)?;
 
         // Rebuild paths for loaded certificates
         for (uuid, cert) in certs.iter_mut() {
@@ -181,7 +187,7 @@ impl KeyStorage {
     fn save_metadata(&self) -> Result<(), KeyStorageError> {
         let metadata_path = self.storage_dir.join("certs.json");
         let file = fs::File::create(metadata_path)?;
-        serde_json::to_writer_pretty(file, &self.certificates)?;
+        serde_json::to_writer_pretty(file, &self.node_info)?;
         Ok(())
     }
 }
