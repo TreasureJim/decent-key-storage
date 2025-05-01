@@ -1,12 +1,11 @@
-pub mod protocol {
-    tonic::include_proto!("info");
-}
+use crate::protocol::proto::info;
 
 pub mod service {
     use std::sync::Arc;
 
+    use crate::protocol::proto::info;
+    use crate::protocol::proto::info::*;
     use crate::protocol::server_state::ServerState;
-    use super::protocol::server_info_server::ServerInfo;
     use tonic::{Request, Response, Status};
 
     use tonic::body::Body;
@@ -21,18 +20,18 @@ pub mod service {
             Self { state }
         }
         
-        pub fn server(state: Arc<ServerState>) -> super::protocol::server_info_server::ServerInfoServer<Self> {
-            super::protocol::server_info_server::ServerInfoServer::new(Self::new(state))
+        pub fn server(state: Arc<ServerState>) -> info::server_info_server::ServerInfoServer<Self> {
+            info::server_info_server::ServerInfoServer::new(Self::new(state))
         }
     }
 
     #[tonic::async_trait]
-    impl ServerInfo for InformationService {
+    impl info::server_info_server::ServerInfo for InformationService {
         async fn get_server_info(
             &self,
-            request: Request<super::protocol::ServerInfoRequest>,
-        ) -> Result<Response<super::protocol::ServerInfoResponse>, Status> {
-            let reply = super::protocol::ServerInfoResponse {
+            request: Request<info::ServerInfoRequest>,
+        ) -> Result<Response<info::ServerInfoResponse>, Status> {
+            let reply = info::ServerInfoResponse {
                 uuid: self.state.info.uuid.to_string(),
             };
             Ok(Response::new(reply))
@@ -54,8 +53,8 @@ pub struct ServerInfo {
     pub uuid: uuid::Uuid,
 }
 
-impl From<protocol::ServerInfoResponse> for ServerInfo {
-    fn from(value: protocol::ServerInfoResponse) -> Self {
+impl From<info::ServerInfoResponse> for ServerInfo {
+    fn from(value: info::ServerInfoResponse) -> Self {
         Self {
             uuid: Uuid::from_str(&value.uuid).expect("Invalid UUID")
         }
