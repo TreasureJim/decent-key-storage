@@ -170,6 +170,12 @@ impl ServerCertVerifier for CustomCertificateVerifier {
 #[derive(Debug)]
 pub struct DangerousCertificateVerifier { }
 
+impl DangerousCertificateVerifier {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl ServerCertVerifier for DangerousCertificateVerifier {
     fn verify_server_cert(
         &self,
