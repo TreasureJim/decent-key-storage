@@ -8,7 +8,11 @@ use http::Uri;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tokio_rustls::TlsConnector;
 
-use crate::{custom_tls::{CaptureErrors, DebugHasKey}, keys::CertificateData, HostPort};
+use crate::{
+    custom_tls::{CaptureErrors, DebugHasKey},
+    keys::CertificateData,
+    HostPort,
+};
 
 #[derive(Error, Debug)]
 pub enum ConnectionError {
@@ -36,7 +40,8 @@ pub async fn connect_and_get_cert(target: &HostPort) -> Result<CertificateData, 
     let tcp_stream = TcpStream::connect(&target.addr).await?;
     let mut stream = TlsConnector::from(Arc::new(unsafe_tls_config))
         .connect(
-            target.addr
+            target
+                .addr
                 .ip()
                 .try_into()
                 .map_err(|_| ConnectionError::DNS)?,
@@ -56,16 +61,17 @@ pub async fn connect_and_get_cert(target: &HostPort) -> Result<CertificateData, 
     Ok(captured_cert)
 }
 
-pub fn cert_verif_client<B>(key_store: Arc<dyn DebugHasKey>) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
-where 
+fn custom_cert_verif_client<B>(
+    custom_cert_verif: Arc<dyn rustls::client::danger::ServerCertVerifier>,
+) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
+where
     B: tonic::transport::Body + Send,
-    B::Data: Send
+    B::Data: Send,
 {
     let tls = rustls::ClientConfig::builder()
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(
-            crate::custom_tls::CustomCertificateVerifier::new(key_store),
-        )).with_no_client_auth();
+        .with_custom_certificate_verifier(custom_cert_verif)
+        .with_no_client_auth();
 
     let mut http = HttpConnector::new();
     http.enforce_http(false);
@@ -83,6 +89,26 @@ where
         .service(http);
 
     hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build::<_, B>(connector)
+}
+
+pub fn safe_client<B>(
+    key_store: Arc<dyn DebugHasKey>,
+) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
+where
+    B: tonic::transport::Body + Send,
+    B::Data: Send,
+{
+    custom_cert_verif_client(Arc::new(crate::custom_tls::CustomCertificateVerifier::new(key_store)))
+}
+
+pub fn dangerous_client<B>(
+    key_store: Arc<dyn DebugHasKey>,
+) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
+where
+    B: tonic::transport::Body + Send,
+    B::Data: Send,
+{
+    custom_cert_verif_client(Arc::new(crate::custom_tls::DangerousCertificateVerifier::new()))
 }
 
 #[cfg(test)]
@@ -196,14 +222,18 @@ mod tests {
         let test_cert = include_bytes!("../../test_data/ed25519-cert.pem").to_vec();
         let test_key = include_bytes!("../../test_data/ed25519-key.pem").to_vec();
 
-        let (_, parsed_cert) = x509_parser::pem::parse_x509_pem(&test_cert).expect("Cert parse error");
+        let (_, parsed_cert) =
+            x509_parser::pem::parse_x509_pem(&test_cert).expect("Cert parse error");
         let parsed_cert = parsed_cert.parse_x509().unwrap();
         let public_key = parsed_cert.public_key();
 
         let server = TestServer::new(&test_cert, &test_key).await;
 
         // Test our function
-        let target = format!("{}:{}", "localhost", server.port).parse::<SocketAddr>().unwrap().into();
+        let target = format!("{}:{}", "localhost", server.port)
+            .parse::<SocketAddr>()
+            .unwrap()
+            .into();
 
         let host = connect_and_get_cert(&target)
             .await
@@ -216,7 +246,10 @@ mod tests {
         Lazy::force(&INIT_CRYPTO);
 
         // Test with non-existent port
-        let target = format!("{}:{}", "localhost", 9999).parse::<SocketAddr>().unwrap().into();
+        let target = format!("{}:{}", "localhost", 9999)
+            .parse::<SocketAddr>()
+            .unwrap()
+            .into();
 
         let result = connect_and_get_cert(&target).await;
         assert!(matches!(result, Err(ConnectionError::Connection(_))));
