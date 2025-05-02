@@ -7,6 +7,7 @@ use rcgen::{generate_simple_self_signed, CertifiedKey};
 use ring::rand::SystemRandom;
 use ring::signature::KeyPair;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::{
     collections::HashMap,
     fs,
@@ -93,6 +94,7 @@ impl KeyStorage {
         uuid: Uuid,
         raw_cert: CertificateData,
         received_at: std::time::SystemTime,
+        sock_addr: SocketAddr
     ) -> Result<(), KeyStorageError> {
         if self.node_info.contains_key(&uuid) {
             return Err(KeyStorageError::DuplicateCertificate(uuid));
@@ -106,11 +108,7 @@ impl KeyStorage {
         }
 
         // Update in-memory state
-        let cert = NodeInfo {
-            uuid,
-            cert_path,
-            received_at,
-        };
+        let cert = NodeInfo::new(uuid, cert_path, received_at, sock_addr);
 
         self.node_info.insert(uuid, cert);
         self.cert_data.insert(uuid, raw_cert);

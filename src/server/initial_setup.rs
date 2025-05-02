@@ -82,7 +82,7 @@ pub async fn contact_servers(
         .try_for_each(|(host, cert, server_info)| {
             future::ready(
                 key_store
-                    .add_certificate(server_info.uuid, cert, std::time::SystemTime::now())
+                    .add_certificate(server_info.uuid, cert, std::time::SystemTime::now(), host)
                     .map_err(|e| (host, Error::SavingCert(e))),
             )
         })
