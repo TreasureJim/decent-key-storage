@@ -21,7 +21,8 @@ use uuid::Uuid;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::X509Certificate;
 
-use crate::keys::{NodeInfo, CertWithMetadata, CertificateData};
+use crate::custom_tls::DebugHasKey;
+use crate::keys::{CertWithMetadata, CertificateData, HasKey, NodeInfo};
 
 pub fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
     let expanded = expanduser::expanduser(path)?;
@@ -100,7 +101,7 @@ impl KeyStorage {
         uuid: Uuid,
         raw_cert: CertificateData,
         received_at: std::time::SystemTime,
-        sock_addr: SocketAddr
+        sock_addr: SocketAddr,
     ) -> Result<(), KeyStorageError> {
         if self.node_info.contains_key(&uuid) {
             return Err(KeyStorageError::DuplicateCertificate(uuid));
@@ -136,23 +137,17 @@ impl KeyStorage {
     }
 
     pub fn get_certificates(&self) -> Vec<CertWithMetadata> {
-        self.cert_map.iter().map(|(cert, uuid)| {
-            let metadata = self
-                .node_info
-                .get(uuid)
-                .expect("Cert store had metadata loaded but not cert");
-
-            CertWithMetadata {
-                cert,
-                metadata
-            }
-        }).collect()
-    }
-
-    // Confirm existence of certificate
-    pub fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
         self.cert_map
-            .contains_key(&CertificateData::new_no_validation(cert))
+            .iter()
+            .map(|(cert, uuid)| {
+                let metadata = self
+                    .node_info
+                    .get(uuid)
+                    .expect("Cert store had metadata loaded but not cert");
+
+                CertWithMetadata { cert, metadata }
+            })
+            .collect()
     }
 
     // Private helpers
@@ -195,6 +190,16 @@ impl KeyStorage {
         Ok(())
     }
 }
+
+impl HasKey for KeyStorage {
+    // Confirm existence of certificate
+    fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
+        self.cert_map
+            .contains_key(&CertificateData::new_no_validation(cert))
+    }
+}
+
+impl DebugHasKey for KeyStorage {}
 
 const KEY_FILE_NAME: &str = "key.pem";
 const CERT_FILE_NAME: &str = "cert.pem";
