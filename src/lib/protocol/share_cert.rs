@@ -6,7 +6,18 @@ pub mod service {
     use crate::protocol::server_state::ServerState;
     use tonic::{Request, Response, Status};
 
+    use crate::keys::CertWithMetadata;
     use tonic::body::Body;
+
+    impl From<CertWithMetadata<'_>> for share_cert::response_certificates::Certificate {
+        fn from(value: CertWithMetadata) -> Self {
+            Self {
+                uuid: value.metadata.uuid.to_string(),
+                ip: value.metadata.sock_addr.to_string(),
+                cert: value.cert.to_vec(),
+            }
+        }
+    }
 
     #[derive(Debug)]
     pub struct ShareCertService {
@@ -29,7 +40,17 @@ pub mod service {
             &self,
             request: tonic::Request<RequestCertificates>,
         ) -> std::result::Result<tonic::Response<ResponseCertificates>, tonic::Status> {
-            self.state.key_store.read().await.list_certificates()
+            Ok(tonic::Response::new(share_cert::ResponseCertificates {
+                certificates: self
+                    .state
+                    .key_store
+                    .read()
+                    .await
+                    .get_certificates()
+                    .into_iter()
+                    .map(|c| c.into())
+                    .collect(),
+            }))
         }
     }
 }
