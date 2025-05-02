@@ -91,6 +91,7 @@ where
     hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build::<_, B>(connector)
 }
 
+/// Uses the key store to check that the received certificate matches one in the key store.
 pub fn safe_client<B>(
     key_store: Arc<dyn DebugHasKey>,
 ) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
@@ -98,9 +99,12 @@ where
     B: tonic::transport::Body + Send,
     B::Data: Send,
 {
-    custom_cert_verif_client(Arc::new(crate::custom_tls::CustomCertificateVerifier::new(key_store)))
+    custom_cert_verif_client(Arc::new(crate::custom_tls::CustomCertificateVerifier::new(
+        key_store,
+    )))
 }
 
+/// DANGEROUS as name implies. Always returns the certificate as valid and correct, performs no checking.
 pub fn dangerous_client<B>(
     key_store: Arc<dyn DebugHasKey>,
 ) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
@@ -108,7 +112,9 @@ where
     B: tonic::transport::Body + Send,
     B::Data: Send,
 {
-    custom_cert_verif_client(Arc::new(crate::custom_tls::DangerousCertificateVerifier::new()))
+    custom_cert_verif_client(Arc::new(
+        crate::custom_tls::DangerousCertificateVerifier::new(),
+    ))
 }
 
 #[cfg(test)]
