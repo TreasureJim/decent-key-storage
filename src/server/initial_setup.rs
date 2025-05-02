@@ -82,7 +82,7 @@ pub async fn contact_servers(
         .try_for_each(|(host, cert, server_info)| {
             future::ready(
                 key_store
-                    .add_certificate(server_info.uuid, cert, std::time::SystemTime::now(), host)
+                    .add_certificate(server_info.uuid, cert, std::time::SystemTime::now(), host.addr)
                     .map_err(|e| (host, Error::SavingCert(e))),
             )
         })
@@ -127,11 +127,11 @@ async fn get_server_info(server: &HostPort, cert: &CertificateData) -> anyhow::R
     let client = lib::connection::cert_verif_client(single_key);
 
     let mut client =
-        lib::protocol::info::protocol::server_info_client::ServerInfoClient::with_origin(client, server.into());
+        lib::protocol::proto::info::server_info_client::ServerInfoClient::with_origin(client, server.into());
 
     let response = client
         .get_server_info(tonic::Request::new(
-            lib::protocol::info::protocol::ServerInfoRequest {},
+            lib::protocol::proto::info::ServerInfoRequest {},
         ))
         .await
         .context("Failed to get server info")?;
