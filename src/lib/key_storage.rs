@@ -124,6 +124,11 @@ impl KeyStorage {
         Ok(())
     }
 
+    /// Returns the amount of nodes and certificates it has.
+    pub fn amount_of_nodes(&self) -> usize {
+        self.node_info.len()
+    }
+
     // Get certificate data (already loaded)
     pub fn get_cert_data(&self, uuid: Uuid) -> Result<&CertificateData, KeyStorageError> {
         self.cert_data
