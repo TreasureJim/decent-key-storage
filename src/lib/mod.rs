@@ -15,7 +15,7 @@ pub mod tls;
 
 #[derive(Clone, Copy, Debug)]
 pub struct HostPort {
-    addr: SocketAddr
+    pub addr: SocketAddr
 }
 
 impl HostPort {
