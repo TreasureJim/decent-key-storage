@@ -1,5 +1,6 @@
 use anyhow::Context;
 use base64::Engine;
+use path_absolutize::Absolutize;
 use pkcs8::der::pem::PemLabel;
 use pkcs8::der::{Encode, EncodePem};
 use pkcs8::{EncodePrivateKey, EncodePublicKey, LineEnding};
@@ -21,6 +22,11 @@ use x509_parser::nom::AsBytes;
 use x509_parser::prelude::X509Certificate;
 
 use crate::keys::{NodeInfo, CertWithMetadata, CertificateData};
+
+pub fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
+    let expanded = expanduser::expanduser(path)?;
+    Ok(expanded.absolutize()?.into_owned())
+}
 
 #[derive(Debug)]
 pub struct KeyStorage {

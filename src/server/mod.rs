@@ -8,7 +8,6 @@ use anyhow::Context;
 use lib::protocol::info::ServerInfo;
 use lib::protocol::server_state::ServerState;
 use lib::HostPort;
-use path_absolutize::Absolutize;
 use tonic::transport::server::ServerTlsConfig;
 use tonic::transport::Identity;
 use tonic::transport::Server;
@@ -20,17 +19,12 @@ const DEFAULT_DATA_LOCATION: &str = "~/.local/decent-key-storage";
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    #[arg(long, value_name = "FOLDER", default_value = DEFAULT_DATA_LOCATION, value_parser = canonicalize_path)]
+    #[arg(long, value_name = "FOLDER", default_value = DEFAULT_DATA_LOCATION, value_parser = lib::key_storage::canonicalize_path)]
     data_folder: PathBuf,
     #[arg(long, value_name = "ADDR", default_value = "0.0.0.0:42000", value_parser = clap::value_parser!(SocketAddr))]
     client_addr: SocketAddr,
     #[arg(long, value_name = "ADDRESSES", value_parser = HostPort::parse_arg)]
     setup_network: Vec<HostPort>,
-}
-
-fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
-    let expanded = expanduser::expanduser(path)?;
-    Ok(expanded.absolutize()?.into_owned())
 }
 
 #[tokio::main]
