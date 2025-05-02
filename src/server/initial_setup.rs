@@ -124,7 +124,7 @@ impl DebugHasKey for SingleKey {}
 async fn get_server_info(server: &HostPort, cert: &CertificateData) -> anyhow::Result<ServerInfo> {
     let single_key = Arc::new(SingleKey(cert.clone()));
 
-    let client = lib::connection::cert_verif_client(single_key);
+    let client = lib::connection::safe_client(single_key);
 
     let mut client =
         lib::protocol::proto::info::server_info_client::ServerInfoClient::with_origin(client, server.into());
