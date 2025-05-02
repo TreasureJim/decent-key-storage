@@ -105,9 +105,7 @@ where
 }
 
 /// DANGEROUS as name implies. Always returns the certificate as valid and correct, performs no checking.
-pub fn dangerous_client<B>(
-    key_store: Arc<dyn DebugHasKey>,
-) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
+pub fn dangerous_client<B>() -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
 where
     B: tonic::transport::Body + Send,
     B::Data: Send,
