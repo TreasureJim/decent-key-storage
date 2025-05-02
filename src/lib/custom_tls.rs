@@ -22,6 +22,7 @@ pub fn supported_verif_algs() -> Vec<SignatureScheme> {
         .supported_schemes()
 }
 
+/// DANGEROUS - always allows the certificate, performs no checking. Uses the tokio sender to send the received certificate once it has been received. 
 #[derive(Debug)]
 pub struct CertTlsCapturer {
     cert_transmitter: Sender<Result<CertificateData, CaptureErrors>>,
@@ -98,6 +99,7 @@ impl ServerCertVerifier for CertTlsCapturer {
 
 pub trait DebugHasKey: HasKey + std::fmt::Debug + Sync + Send {}
 
+/// Uses the key store to check that the received certificate matches one in the key store
 #[derive(Debug)]
 pub struct CustomCertificateVerifier {
     key_store: Arc<dyn DebugHasKey>,
@@ -124,6 +126,60 @@ impl ServerCertVerifier for CustomCertificateVerifier {
         } else {
             Err(rustls::Error::InconsistentKeys(rustls::InconsistentKeys::KeyMismatch))
         }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &tonic::transport::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::CryptoProvider::get_default()
+                .unwrap()
+                .signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &tonic::transport::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::CryptoProvider::get_default()
+                .unwrap()
+                .signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        supported_verif_algs()
+    }
+}
+
+/// DANGEROUS as name implies. Always returns the certificate as valid and correct, performs no
+/// checking.
+#[derive(Debug)]
+pub struct DangerousCertificateVerifier { }
+
+impl ServerCertVerifier for DangerousCertificateVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &tonic::transport::CertificateDer<'_>,
+        _intermediates: &[tonic::transport::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
