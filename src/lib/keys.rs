@@ -1,4 +1,4 @@
-use std::{ops::Deref, path::PathBuf};
+use std::{net::SocketAddr, ops::Deref, path::PathBuf};
 
 use base64::Engine;
 use serde::{Serialize, Deserialize};
@@ -23,7 +23,14 @@ pub struct NodeInfo {
     #[serde(skip_serializing)]
     pub cert_path: PathBuf,  // Will be derived from uuid
     pub received_at: std::time::SystemTime,
+    pub sock_addr: SocketAddr,
     // signed_by: Option<SignatureInfo>,  // To be implemented later
+}
+
+impl NodeInfo {
+    pub fn new(uuid: Uuid, cert_path: PathBuf, received_at: std::time::SystemTime, sock_addr: SocketAddr) -> Self {
+        Self { uuid, cert_path, received_at, sock_addr }
+    }
 }
 
 pub trait HasKey {
