@@ -41,6 +41,7 @@ pub mod service {
             request: tonic::Request<RequestCertificates>,
         ) -> std::result::Result<tonic::Response<ResponseCertificates>, tonic::Status> {
             Ok(tonic::Response::new(share_cert::ResponseCertificates {
+                uuid: self.state.info.uuid.to_string(),
                 certificates: self
                     .state
                     .key_store

@@ -14,5 +14,6 @@ message ResponseCertificates {
 		bytes cert = 3;
 	}
 
-	repeated Certificate certificates = 1;
+	string uuid = 1;
+	repeated Certificate certificates = 2;
 }

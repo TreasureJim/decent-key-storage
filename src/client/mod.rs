@@ -62,16 +62,6 @@ async fn main() -> anyhow::Result<()> {
 
     // TRUST ON FIRST USE MODEL
 
-    let mut greeter_client = pb::greeter_client::GreeterClient::new(channel.clone());
-
-    let r = greeter_client
-        .say_hello(pb::HelloRequest {
-            name: "Liam".to_string(),
-        })
-        .await
-        .unwrap();
-
-    println!("{:?}", r);
 
     // let mut client = greeter_client::new(channel);
     // let request = tonic::Request::new(EchoRequest {
