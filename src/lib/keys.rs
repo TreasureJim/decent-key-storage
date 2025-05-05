@@ -1,10 +1,13 @@
 use std::{net::SocketAddr, ops::Deref, path::PathBuf};
+use anyhow::Result;
 
 use base64::Engine;
 use serde::{Serialize, Deserialize};
 use sha2::Digest;
 use tonic::transport::CertificateDer;
 use uuid::Uuid;
+
+use crate::key_storage::KeyStorage;
 
 pub fn key_fingerprint_b64(key: impl AsRef<[u8]>) -> String {
     let hash = sha2::Sha256::digest(key);
@@ -90,4 +93,19 @@ impl<'a> Deref for CertificateData {
     fn deref(&self) -> &Self::Target {
         &*self.raw_der
     }
+}
+
+impl TryFrom<Vec<u8>> for CertificateData {
+    type Error = x509_parser::error::X509Error;
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Self::validate_certificate_data(&*value)?;
+        Ok(Self {
+            raw_der: value
+        })
+    }
+}
+
+pub fn save_tonic_certificate(key_storage: &mut KeyStorage, cert: crate::protocol::proto::share_cert::response_certificates::Certificate) -> anyhow::Result<()> {
+    key_storage.add_certificate(cert.uuid.parse()?, cert.cert.try_into()?, std::time::SystemTime::now(), cert.ip.parse()?)?;
+    Ok(())
 }

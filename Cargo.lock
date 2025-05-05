@@ -478,6 +478,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-util",
+ "itertools 0.14.0",
  "log",
  "once_cell",
  "path-absolutize",
