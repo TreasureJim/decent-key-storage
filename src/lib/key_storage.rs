@@ -1,4 +1,5 @@
 use anyhow::Context;
+use arc_swap::ArcSwap;
 use base64::Engine;
 use path_absolutize::Absolutize;
 use pkcs8::der::pem::PemLabel;
@@ -8,7 +9,9 @@ use rcgen::{generate_simple_self_signed, CertifiedKey};
 use ring::rand::SystemRandom;
 use ring::signature::KeyPair;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::{
     collections::HashMap,
     fs,
@@ -16,6 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use thiserror::Error;
+use tokio::sync::RwLock;
 use tonic::transport::{CertificateDer, Identity};
 use uuid::Uuid;
 use x509_parser::nom::AsBytes;
@@ -29,13 +33,58 @@ pub fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
     Ok(expanded.absolutize()?.into_owned())
 }
 
+
+#[derive(Debug)]
+struct UuidCertBiMap {
+    uuid_to_cert: HashMap<Uuid, Arc<CertificateData>>,
+    cert_to_uuid: HashMap<Arc<CertificateData>, Uuid>,
+}
+
+impl UuidCertBiMap {
+    pub fn new() -> Self {
+        Self {
+            uuid_to_cert: HashMap::new(),
+            cert_to_uuid: HashMap::new(),
+        }
+    }
+
+    pub fn get_cert(&self, uuid: &Uuid) -> Option<&Arc<CertificateData>> {
+        self.uuid_to_cert.get(uuid)
+    }
+
+    pub fn get_uuid(&self, cert: &CertificateData) -> Option<&Uuid> {
+        self.cert_to_uuid.get(cert)
+    }
+
+    /// Returns true if map already contained certicate
+    pub fn insert(&mut self, uuid: Uuid, cert: CertificateData)  {
+        let rc = Arc::new(cert);
+        self.uuid_to_cert.insert(uuid, rc.clone());
+        self.cert_to_uuid.insert(rc, uuid);
+    }
+
+    pub fn get_all_certificates(&self) -> Vec<&Arc<CertificateData>> {
+        self.cert_to_uuid.keys().collect()
+    }
+
+    pub fn get_all_uuids(&self) -> Vec<&Uuid> {
+        self.uuid_to_cert.keys().collect()
+    }
+
+    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, Uuid, Arc<CertificateData>> {
+        self.uuid_to_cert.iter()
+    }
+}
+
+
 #[derive(Debug)]
 pub struct KeyStorage {
     storage_dir: PathBuf,
-    node_info: HashMap<uuid::Uuid, NodeInfo>,
-    cert_data: HashMap<uuid::Uuid, CertificateData>,
+    node_info: HashMap<Uuid, NodeInfo>,
     // Used for quickly checking if the store includes a certificate
-    cert_map: HashMap<CertificateData, uuid::Uuid>,
+    uuid_cert_bimap: UuidCertBiMap,
+
+    snapshot: arc_swap::ArcSwap<HashSet<CertificateData>>,
 }
 
 #[derive(Debug, Error)]
@@ -72,26 +121,27 @@ impl KeyStorage {
         fs::create_dir_all(storage_dir.join("certs"))?;
 
         // Load metadata
-        let certificates = if storage_dir.join("certs.json").exists() {
+        let cert_metadata = if storage_dir.join("certs.json").exists() {
             Self::load_metadata(&storage_dir)?
         } else {
             HashMap::new()
         };
 
         // Pre-load all certificate data
-        let mut cert_data = HashMap::new();
-        let mut cert_map = HashMap::new();
-        for (uuid, _) in &certificates {
+        let mut uuid_cert_bimap = UuidCertBiMap::new();
+        let mut cert_list = HashSet::new();
+        cert_list.reserve(cert_metadata.len());
+        for (uuid, _) in &cert_metadata {
             let data = Self::load_cert_file(&storage_dir, *uuid)?;
-            cert_map.insert(data.clone(), *uuid);
-            cert_data.insert(*uuid, data);
+            cert_list.insert(data.clone());
+            uuid_cert_bimap.insert(*uuid, data.clone());
         }
 
         Ok(Self {
+            snapshot: ArcSwap::from_pointee(cert_list),
             storage_dir,
-            node_info: certificates,
-            cert_data,
-            cert_map,
+            node_info: cert_metadata,
+            uuid_cert_bimap,
         })
     }
 
@@ -118,8 +168,10 @@ impl KeyStorage {
         let cert = NodeInfo::new(uuid, cert_path, received_at, sock_addr);
 
         self.node_info.insert(uuid, cert);
-        self.cert_data.insert(uuid, raw_cert);
+        self.uuid_cert_bimap.insert(uuid, raw_cert);
         self.save_metadata()?;
+
+        self.update_snapshot();
 
         Ok(())
     }
@@ -130,10 +182,10 @@ impl KeyStorage {
     }
 
     // Get certificate data (already loaded)
-    pub fn get_cert_data(&self, uuid: Uuid) -> Result<&CertificateData, KeyStorageError> {
-        self.cert_data
-            .get(&uuid)
-            .ok_or(KeyStorageError::CertificateNotFound(uuid))
+    pub fn get_cert_data(&self, uuid: &Uuid) -> Result<&Arc<CertificateData>, KeyStorageError> {
+        self.uuid_cert_bimap
+            .get_cert(uuid)
+            .ok_or(KeyStorageError::CertificateNotFound(*uuid))
     }
 
     // List all certificate UUIDs
@@ -142,9 +194,9 @@ impl KeyStorage {
     }
 
     pub fn get_certificates(&self) -> Vec<CertWithMetadata> {
-        self.cert_map
+        self.uuid_cert_bimap
             .iter()
-            .map(|(cert, uuid)| {
+            .map(|(uuid, cert)| {
                 let metadata = self
                     .node_info
                     .get(uuid)
@@ -155,7 +207,23 @@ impl KeyStorage {
             .collect()
     }
 
+    pub fn get_certificate_uuid<'a>(&'a self, uuid: &Uuid) -> Option<CertWithMetadata<'a>> {
+        Some(CertWithMetadata {
+            cert: self.uuid_cert_bimap.get_cert(uuid)?,
+            metadata: self.node_info.get(uuid)?
+        })
+    }
+
+    pub fn snapshot(&self) -> Arc<HashSet<CertificateData>> {
+        self.snapshot.load_full()
+    }
+
     // Private helpers
+
+    fn update_snapshot(&self) {
+        self.snapshot
+            .swap(Arc::new(self.uuid_cert_bimap.get_all_certificates().into_iter().map(|c| (**c).clone()).collect()));
+    }
 
     fn cert_path(&self, uuid: Uuid) -> PathBuf {
         self.storage_dir.join("certs").join(format!("{}.pem", uuid))
@@ -199,8 +267,8 @@ impl KeyStorage {
 impl HasKey for KeyStorage {
     // Confirm existence of certificate
     fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
-        self.cert_map
-            .contains_key(&CertificateData::new_no_validation(cert))
+        self.uuid_cert_bimap
+            .get_uuid(&CertificateData::new_no_validation(cert)).is_some()
     }
 }
 
