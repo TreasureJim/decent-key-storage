@@ -217,6 +217,10 @@ impl KeyStorage {
         self.snapshot.load_full()
     }
 
+    pub fn get_all_node_info(&self) -> std::collections::hash_map::Values<'_, Uuid, NodeInfo> {
+        self.node_info.values()
+    }
+
     // Private helpers
 
     fn update_snapshot(&self) {

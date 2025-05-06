@@ -4,7 +4,9 @@ pub mod service {
     use crate::protocol::proto::share_cert;
     use crate::protocol::proto::share_cert::*;
     use crate::protocol::server_state::ServerState;
+    use itertools::Itertools;
     use tonic::{Request, Response, Status};
+    use uuid::Uuid;
 
     use crate::keys::CertWithMetadata;
     use tonic::body::Body;
@@ -13,7 +15,7 @@ pub mod service {
         fn from(value: CertWithMetadata) -> Self {
             Self {
                 uuid: value.metadata.uuid.to_string(),
-                ip: value.metadata.sock_addr.to_string(),
+                socket: value.metadata.sock_addr.to_string(),
                 cert: value.cert.to_vec(),
             }
         }
@@ -40,18 +42,40 @@ pub mod service {
             &self,
             request: tonic::Request<RequestCertificates>,
         ) -> std::result::Result<tonic::Response<ResponseCertificates>, tonic::Status> {
-            Ok(tonic::Response::new(share_cert::ResponseCertificates {
-                uuid: self.state.info.uuid.to_string(),
-                certificates: self
-                    .state
-                    .key_store
-                    .read()
-                    .await
-                    .get_certificates()
-                    .into_iter()
-                    .map(|c| c.into())
-                    .collect(),
-            }))
+            let request = request.into_inner();
+
+            if request.uuids.is_empty() {
+                Ok(tonic::Response::new(share_cert::ResponseCertificates {
+                    uuid: self.state.info.uuid.to_string(),
+                    certificates: self
+                        .state
+                        .key_store
+                        .read()
+                        .await
+                        .get_certificates()
+                        .into_iter()
+                        .map(|c| c.into())
+                        .collect(),
+                }))
+            } else {
+                let key_store = self.state.key_store.read().await;
+                Ok(tonic::Response::new(share_cert::ResponseCertificates {
+                    uuid: self.state.info.uuid.to_string(),
+                    certificates: request
+                        .uuids
+                        .iter()
+                        .map(|str| {
+                            let uuid = str.parse::<Uuid>().map_err(|e| {
+                                Status::invalid_argument(format!("Uuid must be valid: {e}"))
+                            })?;
+                            Ok(key_store
+                                .get_certificate_uuid(&uuid)
+                                .ok_or(Status::not_found(format!("Uuid {uuid} not found.")))?
+                                .into())
+                        })
+                        .collect::<Result<Vec<_>, tonic::Status>>()?,
+                }))
+            }
         }
     }
 }

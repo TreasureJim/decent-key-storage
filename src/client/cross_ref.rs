@@ -1,3 +1,10 @@
+use std::collections::HashSet;
+use lib::protocol::proto::share_cert::{response_certificates::Certificate, ResponseCertificates};
+use uuid::Uuid;
+use log::{debug, warn};
+
+use crate::connect_network::CrossReferencedCertificates;
+
 pub fn cross_ref(lol_certs: Vec<ResponseCertificates>) -> CrossReferencedCertificates {
     let mut groups = Vec::new();
     let mut iter = lol_certs.into_iter();

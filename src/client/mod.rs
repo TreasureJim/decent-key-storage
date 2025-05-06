@@ -69,7 +69,6 @@ async fn main() -> anyhow::Result<()> {
         .get_certificates(tonic::Request::new(
             lib::protocol::proto::share_cert::RequestCertificates {
                 uuids: vec![],
-                sockets: vec![args.server_addr.to_string()],
             },
         ))
         .await?

@@ -1,14 +1,18 @@
 use once_cell::sync::Lazy;
 use rustls::client::danger::ServerCertVerifier;
 use rustls::SignatureScheme;
-use std::sync::{
+use std::{collections::HashSet, sync::{
     mpsc::{Receiver, Sender},
     Arc,
-};
+}};
 use thiserror::Error;
+use tokio::sync::RwLock;
 use x509_parser::{oid_registry, prelude::FromDer};
 
-use crate::{key_storage::KeyStorage, keys::{CertificateData, HasKey}};
+use crate::{
+    key_storage::KeyStorage,
+    keys::{CertificateData, HasKey},
+};
 
 pub type CaptureErrors = x509_parser::prelude::X509Error;
 
@@ -22,7 +26,7 @@ pub fn supported_verif_algs() -> Vec<SignatureScheme> {
         .supported_schemes()
 }
 
-/// DANGEROUS - always allows the certificate, performs no checking. Uses the tokio sender to send the received certificate once it has been received. 
+/// DANGEROUS - always allows the certificate, performs no checking. Uses the tokio sender to send the received certificate once it has been received.
 #[derive(Debug)]
 pub struct CertTlsCapturer {
     cert_transmitter: Sender<Result<CertificateData, CaptureErrors>>,
@@ -99,6 +103,14 @@ impl ServerCertVerifier for CertTlsCapturer {
 
 pub trait DebugHasKey: HasKey + std::fmt::Debug + Sync + Send {}
 
+impl DebugHasKey for HashSet<CertificateData> { }
+impl HasKey for HashSet<CertificateData> { 
+    fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
+        self.contains(&CertificateData::new_no_validation(cert))
+    }
+}
+
+
 /// Uses the key store to check that the received certificate matches one in the key store
 #[derive(Debug)]
 pub struct CustomCertificateVerifier {
@@ -109,7 +121,6 @@ impl CustomCertificateVerifier {
     pub fn new(key_store: Arc<dyn DebugHasKey>) -> Self {
         Self { key_store }
     }
-
 }
 
 impl ServerCertVerifier for CustomCertificateVerifier {
@@ -124,7 +135,9 @@ impl ServerCertVerifier for CustomCertificateVerifier {
         if self.key_store.have_tonic_certificate(end_entity) {
             Ok(rustls::client::danger::ServerCertVerified::assertion())
         } else {
-            Err(rustls::Error::InconsistentKeys(rustls::InconsistentKeys::KeyMismatch))
+            Err(rustls::Error::InconsistentKeys(
+                rustls::InconsistentKeys::KeyMismatch,
+            ))
         }
     }
 
@@ -168,7 +181,7 @@ impl ServerCertVerifier for CustomCertificateVerifier {
 /// DANGEROUS as name implies. Always returns the certificate as valid and correct, performs no
 /// checking.
 #[derive(Debug)]
-pub struct DangerousCertificateVerifier { }
+pub struct DangerousCertificateVerifier {}
 
 impl DangerousCertificateVerifier {
     pub fn new() -> Self {

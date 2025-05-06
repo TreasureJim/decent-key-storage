@@ -15,7 +15,7 @@ use log::{debug, error, info, warn};
 use crate::cross_ref;
 
 #[derive(Debug)]
-pub struct CrossReferencedCertificates(Vec<(HashSet<Certificate>, Vec<Uuid>)>);
+pub struct CrossReferencedCertificates(pub Vec<(HashSet<Certificate>, Vec<Uuid>)>);
 
 impl std::ops::Deref for CrossReferencedCertificates {
     type Target = Vec<(HashSet<Certificate>, Vec<Uuid>)>;

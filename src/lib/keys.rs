@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, ops::Deref, path::PathBuf};
+use std::{net::SocketAddr, ops::Deref, path::PathBuf, sync::Arc};
 use anyhow::Result;
 
 use base64::Engine;
@@ -16,7 +16,7 @@ pub fn key_fingerprint_b64(key: impl AsRef<[u8]>) -> String {
 
 #[derive(Debug)]
 pub struct CertWithMetadata<'a> {
-    pub cert: &'a CertificateData,
+    pub cert: &'a Arc<CertificateData>,
     pub metadata: &'a NodeInfo
 }
 
@@ -106,6 +106,6 @@ impl TryFrom<Vec<u8>> for CertificateData {
 }
 
 pub fn save_tonic_certificate(key_storage: &mut KeyStorage, cert: crate::protocol::proto::share_cert::response_certificates::Certificate) -> anyhow::Result<()> {
-    key_storage.add_certificate(cert.uuid.parse()?, cert.cert.try_into()?, std::time::SystemTime::now(), cert.ip.parse()?)?;
+    key_storage.add_certificate(cert.uuid.parse()?, cert.cert.try_into()?, std::time::SystemTime::now(), cert.socket.parse()?)?;
     Ok(())
 }
