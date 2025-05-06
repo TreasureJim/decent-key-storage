@@ -2,16 +2,17 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use thiserror::Error;
 
-use futures::StreamExt;
 use lib::protocol::proto::share_cert::RequestCertificates;
 use lib::protocol::proto::share_cert::{
-    self, response_certificates::Certificate, ResponseCertificates,
+    self, response_certificates::Certificate,
 };
 
 use itertools::Itertools;
 use lib::{key_storage, HostPort};
 use uuid::Uuid;
 use log::{debug, error, info, warn};
+
+use crate::cross_ref;
 
 #[derive(Debug)]
 pub struct CrossReferencedCertificates(Vec<(HashSet<Certificate>, Vec<Uuid>)>);
@@ -43,7 +44,7 @@ pub enum Error {
     SavingCertificate(#[from] anyhow::Error),
 }
 
-pub async fn connect_network(
+pub async fn integrate_with_network(
     key_storage: &mut key_storage::KeyStorage,
     servers: &[HostPort],
 ) -> Result<(), Error> {
@@ -60,7 +61,7 @@ pub async fn connect_network(
         );
 
         match cert_client
-            .get_certificates(tonic::Request::new(RequestCertificates {}))
+            .get_certificates(tonic::Request::new(RequestCertificates { uuids: vec![] }))
             .await
         {
             Ok(response) => {
@@ -82,7 +83,7 @@ pub async fn connect_network(
 
     info!("Received certificates from all servers");
 
-    let cross_reference = cross_ref(lol_certs);
+    let cross_reference = cross_ref::cross_ref(lol_certs);
 
     if cross_reference.len() > 1 {
         warn!(
@@ -103,42 +104,3 @@ pub async fn connect_network(
     Ok(())
 }
 
-fn cross_ref(lol_certs: Vec<ResponseCertificates>) -> CrossReferencedCertificates {
-    let mut groups = Vec::new();
-    let mut iter = lol_certs.into_iter();
-
-    let create_set = |ResponseCertificates { uuid, certificates }| {
-        (
-            certificates.into_iter().collect::<HashSet<_>>(),
-            vec![uuid.parse::<Uuid>().expect("Server gave invalid uuid")],
-        )
-    };
-
-    {
-        let first = iter.next().unwrap();
-        groups.push(create_set(first));
-    }
-
-    let mut current_group = &mut groups[0];
-
-    for child in iter {
-        if response_certs_match(&current_group.0, &child) {
-            debug!("Response from {} matched current group", child.uuid);
-            current_group.1.push(child.uuid.parse::<Uuid>().unwrap());
-        } else {
-            warn!("Response from {} did not match current group", child.uuid);
-            groups.push(create_set(child));
-            current_group = groups.last_mut().unwrap();
-        }
-    }
-
-    CrossReferencedCertificates(groups)
-}
-
-fn response_certs_match(set: &HashSet<Certificate>, response: &ResponseCertificates) -> bool {
-    if set.len() != response.certificates.len() {
-        return false;
-    }
-
-    response.certificates.iter().all(|cert| set.contains(cert))
-}
