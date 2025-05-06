@@ -182,10 +182,9 @@ impl KeyStorage {
     }
 
     // Get certificate data (already loaded)
-    pub fn get_cert_data(&self, uuid: &Uuid) -> Result<&Arc<CertificateData>, KeyStorageError> {
+    pub fn get_cert_data(&self, uuid: &Uuid) -> Option<&Arc<CertificateData>> {
         self.uuid_cert_bimap
             .get_cert(uuid)
-            .ok_or(KeyStorageError::CertificateNotFound(*uuid))
     }
 
     // List all certificate UUIDs
