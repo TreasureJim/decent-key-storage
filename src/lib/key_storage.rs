@@ -182,7 +182,7 @@ impl KeyStorage {
     }
 
     // Get certificate data (already loaded)
-    pub fn get_cert_data(&self, uuid: &Uuid) -> Option<&Arc<CertificateData>> {
+    pub fn get_cert_data<'a>(&'a self, uuid: &Uuid) -> Option<&'a Arc<CertificateData>> {
         self.uuid_cert_bimap
             .get_cert(uuid)
     }
