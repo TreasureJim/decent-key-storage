@@ -1,5 +1,4 @@
-use anyhow::Context;
-use lib::{key_storage::KeyStorage, keys::CertificateData, HostPort};
+use lib::{key_storage::KeyStorage, keys::{save_tonic_certificate, CertificateData}, HostPort};
 use log::{info, warn};
 use rand::seq::IteratorRandom;
 use std::sync::Arc;
@@ -30,16 +29,7 @@ pub async fn query_for_uuid<'a>(
     }
 
     let cert = query_network_for_uuid(key_storage, uuid, n).await?;
-    key_storage.add_certificate(
-        cert.uuid.parse().context("Could not parse uuid")?,
-        cert.cert
-            .try_into()
-            .context("Certificate was not valid format")?,
-        std::time::SystemTime::now(),
-        cert.socket
-            .parse()
-            .context("The socket was not valid format")?,
-    )?;
+    save_tonic_certificate(key_storage, cert)?;
     Ok(key_storage.get_cert_data(uuid).unwrap().clone())
 }
 
