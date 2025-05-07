@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use lib::key_storage::KeyStorage;
-use lib::keys::Identity;
+use lib::keys::{CertificateData, Identity};
 use lib::protocol::info::ServerInfo;
 use lib::protocol::server_state::ServerState;
 use lib::HostPort;
@@ -46,11 +46,17 @@ async fn main() -> anyhow::Result<()> {
         .map_err(anyhow::Error::new)
         .context("Failed to load server info")?;
 
-        let mut key_store = match KeyStorage::load_from_folder(&args.data_folder).unwrap() {
+        let key_store = match KeyStorage::load_from_folder(&args.data_folder).unwrap() {
             Some(storage) => storage,
             None => {
                 let mut storage = KeyStorage::create(&args.data_folder).unwrap();
-                storage.add_certificate(info.uuid, identity.cert.clone().into_inner().try_into()?, std::time::SystemTime::now(), args.client_addr)?;
+                storage.add_certificate(
+                    info.uuid,
+                    CertificateData::from_pem(identity.cert.clone().into_inner())
+                        .context("Parsing this servers certificate")?,
+                    std::time::SystemTime::now(),
+                    args.client_addr,
+                )?;
                 storage
             }
         };
