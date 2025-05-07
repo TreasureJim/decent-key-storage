@@ -20,13 +20,13 @@ use std::{
 };
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tonic::transport::{CertificateDer, Identity};
+use tonic::transport::CertificateDer;
 use uuid::Uuid;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::X509Certificate;
 
 use crate::custom_tls::DebugHasKey;
-use crate::keys::{CertWithMetadata, CertificateData, HasKey, NodeInfo};
+use crate::keys::{CertWithMetadata, CertificateData, HasKey, Identity, NodeInfo};
 
 pub fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
     let expanded = expanduser::expanduser(path)?;
@@ -112,8 +112,30 @@ pub enum KeyStorageError {
 }
 
 impl KeyStorage {
-    /// Initialize and load all certificate data
-    pub fn new(storage_dir: impl AsRef<Path>) -> Result<Self, KeyStorageError> {
+    /// Creates new key storage and overwrites the existing one.
+    pub fn create(storage_dir: impl AsRef<Path>) -> Result<Self, KeyStorageError> {
+        let storage_dir = storage_dir.as_ref().to_path_buf();
+
+        // Create directories if they don't exist
+        fs::create_dir_all(&storage_dir)?;
+        fs::create_dir_all(storage_dir.join("certs"))?;
+
+        let cert_metadata = HashMap::new();
+
+        // Pre-load all certificate data
+        let uuid_cert_bimap = UuidCertBiMap::new();
+        let cert_list = HashSet::new();
+
+        Ok(Self {
+            snapshot: ArcSwap::from_pointee(cert_list),
+            storage_dir,
+            node_info: cert_metadata,
+            uuid_cert_bimap,
+        })
+    }
+
+    /// Initialize and load all certificate data. Returns None if doesn't exist.
+    pub fn load_from_folder(storage_dir: impl AsRef<Path>) -> Result<Option<Self>, KeyStorageError> {
         let storage_dir = storage_dir.as_ref().to_path_buf();
 
         // Create directories if they don't exist
@@ -124,7 +146,7 @@ impl KeyStorage {
         let cert_metadata = if storage_dir.join("certs.json").exists() {
             Self::load_metadata(&storage_dir)?
         } else {
-            HashMap::new()
+            return Ok(None)
         };
 
         // Pre-load all certificate data
@@ -137,12 +159,12 @@ impl KeyStorage {
             uuid_cert_bimap.insert(*uuid, data.clone());
         }
 
-        Ok(Self {
+        Ok(Some(Self {
             snapshot: ArcSwap::from_pointee(cert_list),
             storage_dir,
             node_info: cert_metadata,
             uuid_cert_bimap,
-        })
+        }))
     }
 
     /// Add a new certificate (saves to disk immediately)
@@ -279,6 +301,7 @@ impl DebugHasKey for KeyStorage {}
 
 const KEY_FILE_NAME: &str = "key.pem";
 const CERT_FILE_NAME: &str = "cert.pem";
+
 
 pub fn create_self_signed_keys(folder: &Path) -> anyhow::Result<Identity> {
     let CertifiedKey { cert, key_pair } = generate_simple_self_signed(&[]).unwrap();

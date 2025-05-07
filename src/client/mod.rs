@@ -6,7 +6,7 @@ mod query_network;
 mod cross_ref;
 
 use anyhow::anyhow;
-use lib::HostPort;
+use lib::{key_storage::KeyStorage, HostPort};
 use uuid::Uuid;
 use std::path::PathBuf;
 
@@ -36,8 +36,12 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    let mut known_hosts = lib::key_storage::KeyStorage::new(args.data_folder)
-        .expect("Error parsing known hosts file");
+    let mut known_hosts = match KeyStorage::load_from_folder(&args.data_folder)
+        .unwrap()
+    {
+        Some(storage) => storage,
+        None => KeyStorage::create(&args.data_folder).unwrap()
+    };
 
     lib::tls::initialize().expect("Couldn't initialise TLS");
 
