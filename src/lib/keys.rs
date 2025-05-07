@@ -14,6 +14,30 @@ pub fn key_fingerprint_b64(key: impl AsRef<[u8]>) -> String {
     base64::engine::general_purpose::STANDARD.encode(hash)
 }
 
+/// Represents a private key and X509 certificate.
+#[derive(Debug, Clone)]
+pub struct Identity {
+    pub cert: tonic::transport::Certificate,
+    pub key: Vec<u8>,
+}
+
+impl Identity {
+    /// Parse a PEM encoded certificate and private key.
+    ///
+    /// The provided cert must contain at least one PEM encoded certificate.
+    pub fn from_pem(cert: impl AsRef<[u8]>, key: impl AsRef<[u8]>) -> Self {
+        let cert = tonic::transport::Certificate::from_pem(cert);
+        let key = key.as_ref().into();
+        Self { cert, key }
+    }
+}
+
+impl Into<tonic::transport::Identity> for Identity {
+    fn into(self) -> tonic::transport::Identity {
+        tonic::transport::Identity::from_pem(self.cert, self.key)
+    }
+}
+
 #[derive(Debug)]
 pub struct CertWithMetadata<'a> {
     pub cert: &'a Arc<CertificateData>,

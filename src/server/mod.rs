@@ -5,11 +5,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
+use lib::key_storage::KeyStorage;
+use lib::keys::Identity;
 use lib::protocol::info::ServerInfo;
 use lib::protocol::server_state::ServerState;
 use lib::HostPort;
 use tonic::transport::server::ServerTlsConfig;
-use tonic::transport::Identity;
 use tonic::transport::Server;
 
 use clap::Parser;
@@ -30,12 +31,13 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let env = env_logger::Env::default().default_filter_or("debug");
-    env_logger::Builder::from_env(env)
-        .init();
+    env_logger::Builder::from_env(env).init();
 
     let args = Args::parse();
 
     lib::tls::initialize().unwrap();
+
+    let identity = get_keys(&args.data_folder)?;
 
     let server_state = {
         let info = ServerInfo::load_or_create(
@@ -44,8 +46,14 @@ async fn main() -> anyhow::Result<()> {
         .map_err(anyhow::Error::new)
         .context("Failed to load server info")?;
 
-        let key_store = lib::key_storage::KeyStorage::new(&args.data_folder)
-            .context("Failed to initialize key storage")?;
+        let mut key_store = match KeyStorage::load_from_folder(&args.data_folder).unwrap() {
+            Some(storage) => storage,
+            None => {
+                let mut storage = KeyStorage::create(&args.data_folder).unwrap();
+                storage.add_certificate(info.uuid, identity.cert.clone().into_inner().try_into()?, std::time::SystemTime::now(), args.client_addr)?;
+                storage
+            }
+        };
 
         ServerState::new(info, key_store)
     };
@@ -54,7 +62,6 @@ async fn main() -> anyhow::Result<()> {
 
     let mut server_handle: tokio::task::JoinHandle<Result<(), tonic::transport::Error>> = {
         let listener = tokio::net::TcpListener::bind(args.client_addr).await?;
-        let identity = get_keys(&args.data_folder)?;
         let shutdown_cpy = Arc::clone(&shutdown);
         let state_clone = Arc::clone(&server_state);
         tokio::spawn(async move {
@@ -62,11 +69,15 @@ async fn main() -> anyhow::Result<()> {
 
             log::info!("Listening on {:?}", local_addr);
             Server::builder()
-                .tls_config(ServerTlsConfig::new().identity(identity))?
+                .tls_config(ServerTlsConfig::new().identity(identity.into()))?
                 .add_service(lib::protocol::info::service::InformationService::server(
                     state_clone.clone(),
                 ))
-                .add_service(lib::protocol::share_cert::service::ShareCertService::server(state_clone.clone()))
+                .add_service(
+                    lib::protocol::share_cert::service::ShareCertService::server(
+                        state_clone.clone(),
+                    ),
+                )
                 .serve_with_incoming_shutdown(
                     tokio_stream::wrappers::TcpListenerStream::new(listener),
                     shutdown_cpy.notified(),
