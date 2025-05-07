@@ -21,7 +21,7 @@ struct Args {
     server_uuid: Uuid,
     #[arg(long, value_name = "FOLDER", default_value = DEFAULT_DATA_LOCATION, value_parser = lib::key_storage::canonicalize_path)]
     data_folder: PathBuf,
-    #[arg(long, value_name = "ADDRESSES", value_parser = HostPort::parse_arg)]
+    #[arg(long, value_name = "ADDRESSES", value_delimiter=',', value_parser = HostPort::parse_arg)]
     connect_network: Vec<HostPort>,
     #[arg(long, short)]
     query_network: bool,
