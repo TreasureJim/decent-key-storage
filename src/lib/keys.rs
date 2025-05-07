@@ -23,7 +23,7 @@ pub struct CertWithMetadata<'a> {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub uuid: Uuid,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     pub cert_path: PathBuf,  // Will be derived from uuid
     pub received_at: std::time::SystemTime,
     pub sock_addr: SocketAddr,

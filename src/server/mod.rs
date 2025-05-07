@@ -64,8 +64,9 @@ async fn main() -> anyhow::Result<()> {
             Server::builder()
                 .tls_config(ServerTlsConfig::new().identity(identity))?
                 .add_service(lib::protocol::info::service::InformationService::server(
-                    state_clone,
+                    state_clone.clone(),
                 ))
+                .add_service(lib::protocol::share_cert::service::ShareCertService::server(state_clone.clone()))
                 .serve_with_incoming_shutdown(
                     tokio_stream::wrappers::TcpListenerStream::new(listener),
                     shutdown_cpy.notified(),
