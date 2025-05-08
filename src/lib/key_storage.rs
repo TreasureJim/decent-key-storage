@@ -104,12 +104,13 @@ impl KeyStorage {
             return Err(KeyStorageError::DuplicateCertificate(uuid));
         } */
 
-        // Update in-memory state
         let cert = NodeInfo::new(uuid, received_at, sock_addr);
+
+        self.backend.save_metadata(&self.node_info)?;
+        self.backend.save_cert(uuid, &raw_cert)?;
 
         self.node_info.insert(uuid, cert);
         self.uuid_cert_bimap.insert(uuid, raw_cert);
-        self.backend.save_metadata(&self.node_info)?;
 
         self.update_snapshot();
 
