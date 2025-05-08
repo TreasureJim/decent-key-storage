@@ -9,8 +9,8 @@ use tokio::{io::AsyncWriteExt, net::TcpStream};
 use tokio_rustls::TlsConnector;
 
 use crate::{
-    custom_tls::{CaptureErrors, DebugHasKey},
-    keys::CertificateData,
+    custom_tls::CaptureErrors,
+    keys::{CertificateData, HasKey},
     HostPort,
 };
 
@@ -93,7 +93,7 @@ where
 
 /// Uses the key store to check that the received certificate matches one in the key store.
 pub fn safe_client<B>(
-    key_store: Arc<dyn DebugHasKey>,
+    key_store: Arc<dyn HasKey>,
 ) -> hyper_util::client::legacy::Client<HttpsConnector<HttpConnector>, B>
 where
     B: tonic::transport::Body + Send,

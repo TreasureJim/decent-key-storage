@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Context;
-use lib::key_storage::KeyStorage;
+use lib::key_storage::{self, KeyStorage};
 use lib::keys::{CertificateData, Identity};
 use lib::protocol::info::ServerInfo;
 use lib::protocol::server_state::ServerState;
@@ -46,20 +46,17 @@ async fn main() -> anyhow::Result<()> {
         .map_err(anyhow::Error::new)
         .context("Failed to load server info")?;
 
-        let key_store = match KeyStorage::load_from_folder(&args.data_folder).unwrap() {
-            Some(storage) => storage,
-            None => {
-                let mut storage = KeyStorage::create(&args.data_folder).unwrap();
-                storage.add_certificate(
-                    info.uuid,
-                    CertificateData::from_pem(identity.cert.clone().into_inner())
-                        .context("Parsing this servers certificate")?,
-                    std::time::SystemTime::now(),
-                    args.client_addr,
-                )?;
-                storage
-            }
-        };
+        let mut key_store = KeyStorage::create_with_backend(Box::new(
+            key_storage::backend::FileStorageBackend::new(args.data_folder),
+        ))
+        .unwrap();
+        key_store.add_certificate(
+            info.uuid,
+            CertificateData::from_pem(identity.cert.clone().into_inner())
+                .context("Parsing this servers certificate")?,
+            std::time::SystemTime::now(),
+            args.client_addr,
+        )?;
 
         ServerState::new(info, key_store)
     };

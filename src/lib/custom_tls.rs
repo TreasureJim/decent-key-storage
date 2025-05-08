@@ -101,9 +101,6 @@ impl ServerCertVerifier for CertTlsCapturer {
     }
 }
 
-pub trait DebugHasKey: HasKey + std::fmt::Debug + Sync + Send {}
-
-impl DebugHasKey for HashSet<CertificateData> { }
 impl HasKey for HashSet<CertificateData> { 
     fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool {
         self.contains(&CertificateData::new_no_validation(cert))
@@ -114,11 +111,11 @@ impl HasKey for HashSet<CertificateData> {
 /// Uses the key store to check that the received certificate matches one in the key store
 #[derive(Debug)]
 pub struct CustomCertificateVerifier {
-    key_store: Arc<dyn DebugHasKey>,
+    key_store: Arc<dyn HasKey>,
 }
 
 impl CustomCertificateVerifier {
-    pub fn new(key_store: Arc<dyn DebugHasKey>) -> Self {
+    pub fn new(key_store: Arc<dyn HasKey>) -> Self {
         Self { key_store }
     }
 }

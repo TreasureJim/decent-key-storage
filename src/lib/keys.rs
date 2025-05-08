@@ -100,8 +100,6 @@ pub struct CertWithMetadata<'a> {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub uuid: Uuid,
-    #[serde(skip)]
-    pub cert_path: PathBuf, // Will be derived from uuid
     pub received_at: std::time::SystemTime,
     pub sock_addr: SocketAddr,
     // signed_by: Option<SignatureInfo>,  // To be implemented later
@@ -110,20 +108,18 @@ pub struct NodeInfo {
 impl NodeInfo {
     pub fn new(
         uuid: Uuid,
-        cert_path: PathBuf,
         received_at: std::time::SystemTime,
         sock_addr: SocketAddr,
     ) -> Self {
         Self {
             uuid,
-            cert_path,
             received_at,
             sock_addr,
         }
     }
 }
 
-pub trait HasKey {
+pub trait HasKey: std::fmt::Debug + Sync + Send + {
     fn have_tonic_certificate(&self, cert: &tonic::transport::CertificateDer<'_>) -> bool;
 }
 

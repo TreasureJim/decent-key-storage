@@ -2,13 +2,16 @@
 #![feature(let_chains)]
 
 mod connect_network;
-mod query_network;
 mod cross_ref;
+mod query_network;
 
 use anyhow::anyhow;
-use lib::{key_storage::KeyStorage, HostPort};
-use uuid::Uuid;
+use lib::{
+    key_storage::{self, KeyStorage},
+    HostPort,
+};
 use std::path::PathBuf;
+use uuid::Uuid;
 
 use clap::Parser;
 
@@ -26,7 +29,7 @@ struct Args {
     #[arg(long, short)]
     query_network: bool,
     #[arg()]
-    n: usize
+    n: usize,
 }
 
 #[tokio::main]
@@ -36,12 +39,10 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    let mut known_hosts = match KeyStorage::load_from_folder(&args.data_folder)
-        .unwrap()
-    {
-        Some(storage) => storage,
-        None => KeyStorage::create(&args.data_folder).unwrap()
-    };
+    let mut known_hosts = KeyStorage::create_with_backend(Box::new(
+        key_storage::backend::FileStorageBackend::new(args.data_folder),
+    ))
+    .unwrap();
 
     lib::tls::initialize().expect("Couldn't initialise TLS");
 
@@ -56,11 +57,12 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow!("ERROR: Network of nodes is not yet connected and connect-network argument not provided with 2 addresses."));
     }
 
-
     // CASES:
 
     // Want to connect to a client we know - use key store
-    if !args.query_network && let Some(cert_data) = known_hosts.get_certificate_uuid(&args.server_uuid) {
+    if !args.query_network
+        && let Some(cert_data) = known_hosts.get_certificate_uuid(&args.server_uuid)
+    {
         println!("Found server locally:");
         println!("{:?}", cert_data);
         return Ok(());

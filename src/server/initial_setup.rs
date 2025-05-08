@@ -4,7 +4,6 @@ use anyhow::Context;
 use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use lib::{
     connection::ConnectionError,
-    custom_tls::DebugHasKey,
     key_storage::{KeyStorage, KeyStorageError},
     keys::{key_fingerprint_b64, CertificateData, HasKey},
     protocol::info::ServerInfo,
@@ -119,7 +118,6 @@ impl HasKey for SingleKey {
         *self.0.raw() == *cert.as_ref()
     }
 }
-impl DebugHasKey for SingleKey {}
 
 async fn get_server_info(server: &HostPort, cert: &CertificateData) -> anyhow::Result<ServerInfo> {
     let single_key = Arc::new(SingleKey(cert.clone()));

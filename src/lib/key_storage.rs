@@ -1,4 +1,5 @@
 mod bimap;
+pub mod backend;
 
 use anyhow::Context;
 use arc_swap::ArcSwap;
@@ -28,7 +29,6 @@ use uuid::Uuid;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::X509Certificate;
 
-use crate::custom_tls::DebugHasKey;
 use crate::keys::{CertWithMetadata, CertificateData, HasKey, Identity, NodeInfo};
 
 pub fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
@@ -39,7 +39,7 @@ pub fn canonicalize_path(path: &str) -> Result<PathBuf, anyhow::Error> {
 
 #[derive(Debug)]
 pub struct KeyStorage {
-    storage_dir: PathBuf,
+    backend: Box<dyn backend::StorageBackend>,
     node_info: HashMap<Uuid, NodeInfo>,
     // Used for quickly checking if the store includes a certificate
     uuid_cert_bimap: UuidCertBiMap,
@@ -72,62 +72,27 @@ pub enum KeyStorageError {
 }
 
 impl KeyStorage {
-    /// Creates new key storage and overwrites the existing one.
-    pub fn create(storage_dir: impl AsRef<Path>) -> Result<Self, KeyStorageError> {
-        let storage_dir = storage_dir.as_ref().to_path_buf();
-
-        // Create directories if they don't exist
-        fs::create_dir_all(&storage_dir)?;
-        fs::create_dir_all(storage_dir.join("certs"))?;
-
-        let cert_metadata = HashMap::new();
-
-        // Pre-load all certificate data
-        let uuid_cert_bimap = UuidCertBiMap::new();
-        let cert_list = HashSet::new();
-
-        Ok(Self {
-            snapshot: ArcSwap::from_pointee(cert_list),
-            storage_dir,
-            node_info: cert_metadata,
-            uuid_cert_bimap,
-        })
-    }
-
-    /// Initialize and load all certificate data. Returns None if doesn't exist.
-    pub fn load_from_folder(storage_dir: impl AsRef<Path>) -> Result<Option<Self>, KeyStorageError> {
-        let storage_dir = storage_dir.as_ref().to_path_buf();
-
-        // Create directories if they don't exist
-        fs::create_dir_all(&storage_dir)?;
-        fs::create_dir_all(storage_dir.join("certs"))?;
-
-        // Load metadata
-        let cert_metadata = if storage_dir.join("certs.json").exists() {
-            Self::load_metadata(&storage_dir)?
-        } else {
-            return Ok(None)
-        };
+    pub fn create_with_backend(backend: Box<dyn backend::StorageBackend>) -> Result<Self, KeyStorageError> {
+        let cert_metadata = backend.load_metadata()?;
 
         // Pre-load all certificate data
         let mut uuid_cert_bimap = UuidCertBiMap::new();
         let mut cert_list = HashSet::new();
         cert_list.reserve(cert_metadata.len());
         for (uuid, _) in &cert_metadata {
-            let data = Self::load_cert_file(&storage_dir, *uuid)?;
+            let data = backend.load_cert(*uuid)?;
             cert_list.insert(data.clone());
             uuid_cert_bimap.insert(*uuid, data.clone());
         }
 
-        Ok(Some(Self {
+        Ok(Self {
+            backend,
             snapshot: ArcSwap::from_pointee(cert_list),
-            storage_dir,
             node_info: cert_metadata,
             uuid_cert_bimap,
-        }))
+        })
     }
 
-    /// Add a new certificate (saves to disk immediately)
     pub fn add_certificate(
         &mut self,
         uuid: Uuid,
@@ -135,23 +100,16 @@ impl KeyStorage {
         received_at: std::time::SystemTime,
         sock_addr: SocketAddr,
     ) -> Result<(), KeyStorageError> {
-        if self.node_info.contains_key(&uuid) {
+        /* if self.node_info.contains_key(&uuid) {
             return Err(KeyStorageError::DuplicateCertificate(uuid));
-        }
-
-        let cert_path = self.cert_path(uuid);
-
-        // Store to disk first
-        {
-            fs::write(&cert_path, raw_cert.to_pem())?;
-        }
+        } */
 
         // Update in-memory state
-        let cert = NodeInfo::new(uuid, cert_path, received_at, sock_addr);
+        let cert = NodeInfo::new(uuid, received_at, sock_addr);
 
         self.node_info.insert(uuid, cert);
         self.uuid_cert_bimap.insert(uuid, raw_cert);
-        self.save_metadata()?;
+        self.backend.save_metadata(&self.node_info)?;
 
         self.update_snapshot();
 
@@ -209,44 +167,6 @@ impl KeyStorage {
         self.snapshot
             .swap(Arc::new(self.uuid_cert_bimap.get_all_certificates().into_iter().map(|c| (**c).clone()).collect()));
     }
-
-    fn cert_path(&self, uuid: Uuid) -> PathBuf {
-        self.storage_dir.join("certs").join(format!("{}.pem", uuid))
-    }
-
-    fn load_metadata(storage_dir: &Path) -> Result<HashMap<Uuid, NodeInfo>, KeyStorageError> {
-        let metadata_path = storage_dir.join("certs.json");
-        if !metadata_path.exists() {
-            return Ok(HashMap::new());
-        }
-
-        let file = fs::File::open(metadata_path)?;
-        let mut certs: HashMap<Uuid, NodeInfo> = serde_json::from_reader(file)?;
-
-        // Rebuild paths for loaded certificates
-        for (uuid, cert) in certs.iter_mut() {
-            cert.cert_path = storage_dir.join("certs").join(format!("{}.pem", uuid));
-        }
-
-        Ok(certs)
-    }
-
-    fn load_cert_file(storage_dir: &Path, uuid: Uuid) -> Result<CertificateData, KeyStorageError> {
-        let cert_path = storage_dir.join("certs").join(format!("{}.pem", uuid));
-        if !cert_path.exists() {
-            return Err(KeyStorageError::MissingCertificateFile(uuid));
-        }
-
-        let pem_string = fs::read(&cert_path)?;
-        Ok(CertificateData::from_pem(pem_string)?)
-    }
-
-    fn save_metadata(&self) -> Result<(), KeyStorageError> {
-        let metadata_path = self.storage_dir.join("certs.json");
-        let file = fs::File::create(metadata_path)?;
-        serde_json::to_writer_pretty(file, &self.node_info)?;
-        Ok(())
-    }
 }
 
 impl HasKey for KeyStorage {
@@ -256,4 +176,3 @@ impl HasKey for KeyStorage {
             .get_uuid(&CertificateData::new_no_validation(cert)).is_some()
     }
 }
-impl DebugHasKey for KeyStorage {}
