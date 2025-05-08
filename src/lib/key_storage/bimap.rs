@@ -1,3 +1,9 @@
+use std::{collections::HashMap, sync::Arc};
+
+use uuid::Uuid;
+
+use crate::keys::CertificateData;
+
 #[derive(Debug)]
 pub struct UuidCertBiMap {
     uuid_to_cert: HashMap<Uuid, Arc<CertificateData>>,
