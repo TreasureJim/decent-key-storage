@@ -88,29 +88,47 @@ impl StorageBackend for FileStorageBackend {
     }
 }
 
+/// For testing. No saving works. 
 #[derive(Debug)]
-pub struct FakeStorageBackend {}
+pub struct FakeStorageBackend {
+    pub metadata: HashMap<Uuid, NodeInfo>,
+    pub certs: HashMap<Uuid, CertificateData>
+}
 
 impl FakeStorageBackend {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            metadata: HashMap::new(),
+            certs: HashMap::new()
+        }
+    }
+
+    pub fn from_existing(metadata: impl IntoIterator<Item = NodeInfo>, certs: impl IntoIterator<Item = CertificateData>) -> Self {
+        let (metadata, certs) = metadata.into_iter().zip(certs).map(|(meta, cert)| {
+            ((meta.uuid.clone(), meta.clone()), (meta.uuid.clone(), cert))
+        }).collect::<(HashMap<_, _>, HashMap<_, _>)>();
+
+        Self {
+            metadata,
+            certs
+        }
     }
 }
 
 impl StorageBackend for FakeStorageBackend {
     fn save_cert(&self, uuid: Uuid, cert: &CertificateData) -> Result<(), std::io::Error> {
-        Ok(())
+        unimplemented!();
     }
 
     fn load_cert(&self, uuid: Uuid) -> Result<CertificateData, KeyStorageError> {
-        Err(KeyStorageError::CertificateNotFound(uuid))
+        self.certs.get(&uuid).ok_or(KeyStorageError::CertificateNotFound(uuid)).cloned()
     }
 
     fn save_metadata(&self, metadata: &HashMap<Uuid, NodeInfo>) -> Result<(), KeyStorageError> {
-        Ok(())
+        unimplemented!();
     }
 
     fn load_metadata(&self) -> Result<HashMap<Uuid, NodeInfo>, std::io::Error> {
-        Ok(HashMap::new())
+        Ok(self.metadata.clone())
     }
 }

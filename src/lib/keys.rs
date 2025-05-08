@@ -97,7 +97,7 @@ pub struct CertWithMetadata<'a> {
     pub metadata: &'a NodeInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub uuid: Uuid,
     pub received_at: std::time::SystemTime,
