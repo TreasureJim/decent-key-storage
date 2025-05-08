@@ -139,7 +139,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn get_keys(folder: &Path) -> anyhow::Result<Identity> {
-    match lib::key_storage::read_self_signed_keys(folder) {
+    match Identity::read_from_folder(folder) {
         Ok(identity) => {
             log::debug!("Found existing self-signed keys in {:?}", folder);
             Ok(identity)
@@ -149,8 +149,11 @@ fn get_keys(folder: &Path) -> anyhow::Result<Identity> {
                 "No existing keys found in {:?}, generating new self-signed keys",
                 folder
             );
-            lib::key_storage::create_self_signed_keys(folder)
-                .map_err(|e| anyhow::anyhow!("Failed to generate new keys: {}", e))
+            let identity = Identity::generate();
+            identity
+                .save_to_folder(folder)
+                .map_err(|e| anyhow::anyhow!("Failed to generate new keys: {}", e))?;
+            Ok(identity)
         }
         Err(err) => {
             log::error!("Error reading keys from {:?}: {}", folder, err);

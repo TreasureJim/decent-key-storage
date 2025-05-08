@@ -256,47 +256,4 @@ impl HasKey for KeyStorage {
             .get_uuid(&CertificateData::new_no_validation(cert)).is_some()
     }
 }
-
 impl DebugHasKey for KeyStorage {}
-
-const KEY_FILE_NAME: &str = "key.pem";
-const CERT_FILE_NAME: &str = "cert.pem";
-
-
-pub fn create_self_signed_keys(folder: &Path) -> anyhow::Result<Identity> {
-    let CertifiedKey { cert, key_pair } = generate_simple_self_signed(&[]).unwrap();
-
-    let cert_pem = cert.pem();
-    let key_pem = key_pair.serialize_pem();
-
-    // Ensure folder exists (or create it)
-    std::fs::create_dir_all(folder)?;
-
-    {
-        // Write private key (with restricted permissions)
-        let secret_path = folder.join(KEY_FILE_NAME);
-        std::fs::write(&secret_path, &key_pem)?;
-        #[cfg(unix)]
-        std::fs::set_permissions(secret_path, std::fs::Permissions::from_mode(0o600))?;
-    }
-
-    {
-        // Write public key
-        std::fs::write(folder.join(CERT_FILE_NAME), &cert_pem)?;
-    }
-
-    Ok(Identity::from_pem(cert_pem, key_pem))
-}
-
-pub fn read_self_signed_keys(folder: &Path) -> Result<Identity, std::io::Error> {
-    let cert = {
-        let path = folder.join(CERT_FILE_NAME);
-        std::fs::read_to_string(path)?
-    };
-    let key = {
-        let path = folder.join(KEY_FILE_NAME);
-        std::fs::read_to_string(path)?
-    };
-
-    Ok(Identity::from_pem(cert, key))
-}
