@@ -121,6 +121,7 @@ mod tests {
 
     use super::*;
     use once_cell::sync::Lazy;
+    use rcgen::CertifiedKey;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer};
     use rustls::{pki_types::pem::PemObject, ServerConfig};
     use std::mem;
@@ -223,8 +224,11 @@ mod tests {
     async fn test_connect_and_get_cert_success() {
         Lazy::force(&INIT_CRYPTO);
 
-        let test_cert = include_bytes!("../../test_data/ed25519-cert.pem").to_vec();
-        let test_key = include_bytes!("../../test_data/ed25519-key.pem").to_vec();
+        let CertifiedKey { cert, key_pair } = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+        let cert = cert.pem();
+        let key = key_pair.serialize_pem();
+        let test_cert = cert.as_ref();
+        let test_key = key.as_ref();
 
         let (_, parsed_cert) =
             x509_parser::pem::parse_x509_pem(&test_cert).expect("Cert parse error");
