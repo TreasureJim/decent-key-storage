@@ -8,7 +8,6 @@ use clap::Parser;
 #[command(version, about)]
 struct Args {
     number_of_clients: usize,
-    ratio_good: f64,
     output: PathBuf,
 }
 
@@ -24,17 +23,18 @@ fn main() {
 
 
 fn run_simulations(folder: &Path) -> anyhow::Result<()> {
-    let ratios = vec![0.6, 0.7, 0.8, 0.9];
-    let node_lengths = vec![11, 31, 51, 101];
-    let ns = vec![3, 5, 7, 9];
+    let ratios = (0..=100).map(|n| n as f64 / 100.0).collect::<Vec<_>>();
+    let node_lengths = (2..=50).map(|n| n * 2 - 1).collect::<Vec<_>>();
+    let ns = (1..=50).map(|n| n * 2 - 1).collect::<Vec<_>>();
     let runs_per_config = 1000;
 
-    for ratio in ratios {
-        let mut wtr = Writer::from_path(folder.join(format!("results_ratio_{:.1}.csv", ratio)))?;
-        wtr.write_record(&["node_len", "n", "accepted_good_pct", "detected_anomaly_pct"])?;
+    let mut wtr = Writer::from_path(folder.join("results.csv"))?;
+    wtr.write_record(&["node_len", "n", "ratio_good", "accepted_good_pct", "detected_anomaly_pct"])?;
+    for (i, ratio) in ratios.iter().enumerate() {
+        println!("{i} out of {}", ratios.len());
 
         for &node_len in &node_lengths {
-            let nodes = simulate_good_bad_nodes(node_len, ratio);
+            let nodes = simulate_good_bad_nodes(node_len, *ratio);
             let mut rng = rand::rng();
 
             for &n in &ns {
@@ -61,6 +61,7 @@ fn run_simulations(folder: &Path) -> anyhow::Result<()> {
                 wtr.write_record(&[
                     node_len.to_string(),
                     n.to_string(),
+                    ratio.to_string(),
                     format!("{:.3}", accepted_good_pct),
                     format!("{:.3}", detected_anomaly_pct),
                 ])?;
