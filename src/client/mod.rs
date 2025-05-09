@@ -69,12 +69,20 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // Want to connect to a client we dont know - query many servers for its cert
-    query_network::query_for_uuid(&mut known_hosts, &args.server_uuid, args.n).await?;
+    println!("Querying network...");
+    if args.query_network {
+        query_network::query_and_update_uuid(&mut known_hosts, &args.server_uuid, args.n).await?;
+        if let Some(cert_data) = known_hosts.get_certificate_uuid(&args.server_uuid) {
+            println!("Retrieved server from network:");
+            println!("{:?}", cert_data);
+            return Ok(());
+        }
+    }
 
+    query_network::query_network_for_uuid(&mut known_hosts, &args.server_uuid, args.n).await?;
     if let Some(cert_data) = known_hosts.get_certificate_uuid(&args.server_uuid) {
-        println!("Retrieved server:");
+        println!("Retrieved server from network:");
         println!("{:?}", cert_data);
-        return Ok(());
     }
 
     Ok(())

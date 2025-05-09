@@ -33,6 +33,16 @@ pub async fn query_for_uuid<'a>(
     Ok(key_storage.get_cert_data(uuid).unwrap().clone())
 }
 
+pub async fn query_and_update_uuid<'a>(
+    key_storage: &'a mut KeyStorage,
+    uuid: &Uuid,
+    n: usize
+) -> Result<Arc<CertificateData>, connect_network::Error> {
+    let cert = query_network_for_uuid(key_storage, uuid, n).await?;
+    save_tonic_certificate(key_storage, cert)?;
+    Ok(key_storage.get_cert_data(uuid).unwrap().clone())
+}
+
 /// Connects to `n` multiple nodes in the network and queries them for a UUID's cert
 /// Then cross references
 pub async fn query_network_for_uuid<'a>(
