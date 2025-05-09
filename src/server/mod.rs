@@ -28,8 +28,20 @@ struct Args {
     setup_network: Vec<HostPort>,
 }
 
+#[cfg(feature = "single_thread")]
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> anyhow::Result<()> {
+    println!("Running single-threaded runtime");
+    run().await
+}
+
+#[cfg(not(feature = "single_thread"))]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    run().await
+}
+
+async fn run() -> anyhow::Result<()> {
     let env = env_logger::Env::default().default_filter_or("debug");
     env_logger::Builder::from_env(env).init();
 

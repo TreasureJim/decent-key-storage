@@ -1,7 +1,10 @@
 [package]
 name = "decent-key-storage"
 version = "0.1.0"
-edition = "2021"
+edition = "2025"
+
+[features]
+single_thread = []
 
 [lib]
 name = "lib"
