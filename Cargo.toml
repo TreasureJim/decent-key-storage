@@ -15,6 +15,10 @@ name = "client"
 path = "src/client/mod.rs"
 
 [[bin]]
+name = "ddos_client"
+path = "src/ddos_client.rs"
+
+[[bin]]
 name = "server"
 path = "src/server/mod.rs"
 
