@@ -1,10 +1,10 @@
-use lib::{key_storage::KeyStorage, keys::{save_tonic_certificate, CertificateData}, HostPort};
+use crate::{key_storage::KeyStorage, keys::{save_tonic_certificate, CertificateData}, HostPort};
 use log::{info, warn};
 use rand::seq::IteratorRandom;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::{connect_network, cross_ref::cross_ref};
+use super::{connect_network, cross_ref::cross_ref};
 
 /// Given a key storage returns a maximum of `n` random known nodes sockets.
 fn random_nodes(key_storage: &KeyStorage, n: usize) -> Vec<HostPort> {
@@ -50,15 +50,15 @@ pub async fn query_network_for_uuid<'a>(
     uuid: &Uuid,
     n: usize,
 ) -> Result<
-    lib::protocol::proto::share_cert::response_certificates::Certificate,
+    crate::protocol::proto::share_cert::response_certificates::Certificate,
     connect_network::Error,
 > {
-    let client = lib::connection::safe_client(key_storage.snapshot());
+    let client = crate::connection::safe_client(key_storage.snapshot());
 
     let responses = random_nodes(key_storage, n).into_iter().map(async |origin| -> Result<_, connect_network::Error> {
-        let mut client = lib::protocol::proto::share_cert::cert_sharing_client::CertSharingClient::with_origin(client.clone(), origin.into());
+        let mut client = crate::protocol::proto::share_cert::cert_sharing_client::CertSharingClient::with_origin(client.clone(), origin.into());
         Ok(client.get_certificates(tonic::Request::new(
-            lib::protocol::proto::share_cert::RequestCertificates {
+            crate::protocol::proto::share_cert::RequestCertificates {
                 uuids: vec![uuid.to_string()]
             }
         )).await.map_err(|e| connect_network::Error::Connection(origin, e))?.into_inner())

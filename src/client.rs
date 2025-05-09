@@ -1,10 +1,6 @@
 #![feature(drain_keep_rest)]
 #![feature(let_chains)]
 
-mod connect_network;
-mod cross_ref;
-mod query_network;
-
 use anyhow::anyhow;
 use lib::{
     key_storage::{self, KeyStorage},
@@ -12,6 +8,7 @@ use lib::{
 };
 use std::path::PathBuf;
 use uuid::Uuid;
+use lib::client_tools::{connect_network, query_network};
 
 use clap::Parser;
 
@@ -47,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
     lib::tls::initialize().expect("Couldn't initialise TLS");
 
     if args.connect_network.len() >= 2 {
-        crate::connect_network::integrate_with_network(&mut known_hosts, &args.connect_network)
+        connect_network::integrate_with_network(&mut known_hosts, &args.connect_network)
             .await?;
         log::info!("Network connection establish and keys downloaded.");
         return Ok(());

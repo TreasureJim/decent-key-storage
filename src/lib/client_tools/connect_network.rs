@@ -2,17 +2,17 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use thiserror::Error;
 
-use lib::protocol::proto::share_cert::RequestCertificates;
-use lib::protocol::proto::share_cert::{
+use crate::protocol::proto::share_cert::RequestCertificates;
+use crate::protocol::proto::share_cert::{
     self, response_certificates::Certificate,
 };
 
 use itertools::Itertools;
-use lib::{key_storage, HostPort};
+use crate::{key_storage, HostPort};
 use uuid::Uuid;
 use log::{debug, error, info, warn};
 
-use crate::cross_ref;
+use super::cross_ref;
 
 #[derive(Debug)]
 pub struct CrossReferencedCertificates(pub Vec<(HashSet<Certificate>, Vec<Uuid>)>);
@@ -51,7 +51,7 @@ pub async fn integrate_with_network(
     assert!(servers.len() >= 2);
 
     info!("Connecting to {} servers...", servers.len());
-    let client = lib::connection::dangerous_client();
+    let client = crate::connection::dangerous_client();
 
     let lol_certs = servers.iter().map(async |server| {
         info!("Requesting certificates from {}", server);
@@ -97,7 +97,7 @@ pub async fn integrate_with_network(
 
     for cert in cross_reference.0.into_iter().nth(0).unwrap().0.into_iter() {
         debug!("Saving certificate: {:?}", cert);
-        lib::keys::save_tonic_certificate(key_storage, cert)?;
+        crate::keys::save_tonic_certificate(key_storage, cert)?;
     }
 
     info!("All certificates saved successfully.");

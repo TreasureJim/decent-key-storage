@@ -1,9 +1,9 @@
 use std::collections::HashSet;
-use lib::protocol::proto::share_cert::{response_certificates::Certificate, ResponseCertificates};
+use crate::protocol::proto::share_cert::{response_certificates::Certificate, ResponseCertificates};
 use uuid::Uuid;
 use log::{debug, warn};
 
-use crate::connect_network::CrossReferencedCertificates;
+use super::connect_network::CrossReferencedCertificates;
 
 pub fn cross_ref(lol_certs: Vec<ResponseCertificates>) -> CrossReferencedCertificates {
     let mut groups = Vec::new();

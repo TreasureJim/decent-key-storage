@@ -12,6 +12,7 @@ pub mod key_storage;
 pub mod keys;
 pub mod protocol;
 pub mod tls;
+pub mod client_tools;
 
 #[derive(Clone, Copy, Debug)]
 pub struct HostPort {
